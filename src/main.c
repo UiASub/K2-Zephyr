@@ -21,6 +21,7 @@
 #include "led.h"
 #include "net.h"
 #include "control.h"
+#include "bitmask.h"
 
 // Register this source file as a log module named "k2_app" with INFO level
 // This allows us to use LOG_INF(), LOG_ERR(), etc. in our code
@@ -41,60 +42,43 @@ int main(void)
 {
     LOG_INF("=== K2 Zephyr Application Starting ===");
     LOG_INF("Board: %s", CONFIG_BOARD);
-    
-    /* 
-     * INITIALIZATION PHASE
-     * Set up all hardware and software components before main loop
-     */
-    
-    // Initialize the LED GPIO pin
+
     led_init();
-
-    // Initialize ROV control system
     rov_control_init();
-    
-    // Initialize networking
     network_init();
-
-    // Start ROV control thread
     rov_control_start();
-    
-    // Start UDP server thread
     udp_server_start();
 
-    /*
-     * MAIN APPLICATION LOOP
-     * 
-     * Monitor network status and UDP server operation
-     * No LED blinking - UDP server now processes structured packets silently
-     */
+    // --- Mock data: ramp values to show movement ---
+    uint64_t bm = 0;
+    uint8_t t = 0;
 
-    //uint32_t loop_count = 0; // Count main loop iterations
-    
-    LOG_INF("Starting main loop");
-    LOG_INF("UDP server will validate structured packets (sequence + payload + CRC32)");
-    LOG_INF("Payload will be forwarded to ROV control system");
-    
-    while (1) {  // Infinite loop - runs forever
-        
-        // Increment counter and log current state
-        //loop_count++;
-        
-        if (network_ready) {
-            //LOG_INF("Loop #%u: Network ready, UDP server processing packets", loop_count);
-            LOG_INF("Network ready, UDP server processing packets");
-        } else {
-            //LOG_INF("Loop #%u: Waiting for network...", loop_count);
+    LOG_INF("Starting main loop (mock bitmask generator)");
+
+    while (1) {
+        // simple pattern
+        bm = 0;
+        bm = bm_set_field(bm, BM_FREMBAK,   t);
+        bm = bm_set_field(bm, BM_OPPNED,    255 - t);
+        bm = bm_set_field(bm, BM_SIDESIDE,  (t + 32));
+        bm = bm_set_field(bm, BM_PITCH,     (t >> 1));
+        bm = bm_set_field(bm, BM_YAW,       (t << 1));
+        bm = bm_set_field(bm, BM_ROLL,      (t ^ 0xAA));
+        bm = bm_set_field(bm, BM_LYS,       (t & 1) ? 1 : 0);
+        bm = bm_set_field(bm, BM_MANIP,     (t | 0x10));
+
+        bm_set_current(bm); 
+
+        t++;
+
+        // status log every 10s like before, or comment out to keep logs quiet
+        if (!network_ready) {
             LOG_INF("Network not ready, waiting...");
         }
 
-        // Sleep for 10 seconds (longer interval for status updates)
-        k_sleep(K_SECONDS(10));
+        k_sleep(K_MSEC(500));
     }
-    
-    // Cleanup (never reached in embedded systems)
-    if (udp_sock >= 0) {
-        zsock_close(udp_sock);
-    }
+
+    // never reached
     return 0;
 }

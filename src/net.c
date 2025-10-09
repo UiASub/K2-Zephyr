@@ -16,6 +16,8 @@
 #include "led.h"
 #include "control.h"
 
+#include "bitmask.h"
+
 // Declare this module for logging purposes
 LOG_MODULE_DECLARE(k2_app);
 
@@ -38,6 +40,15 @@ typedef struct {
 // Network management callback structure for handling interface events
 static struct net_mgmt_event_callback mgmt_cb;
 bool network_ready = false;  // Flag to track network interface status
+
+static inline uint64_t host_to_net_64(uint64_t value)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    return __builtin_bswap64(value);
+#else
+    return value;
+#endif
+}
 
 // UDP socket and thread management variables
 int udp_sock = -1;                                    // UDP socket file descriptor
@@ -255,6 +266,29 @@ static inline uint64_t net_to_host_64(uint64_t value)
 #endif
 }
 
+static int send_udp_packet(int sock, const struct sockaddr_in *to, uint32_t seq_host, uint64_t payload_host)
+{
+    typedef struct {
+        uint32_t sequence;
+        uint64_t payload;
+        uint32_t crc32;
+    } __attribute__((packed)) udp_packet_t_local;
+
+    udp_packet_t_local out = {0};
+
+    // Fill in network order for sequence/payload
+    out.sequence = htonl(seq_host);
+    out.payload  = host_to_net_64(payload_host);
+
+    // CRC is computed over sequence+payload bytes (network order)
+    extern uint32_t calculate_crc32(const void *data, size_t length); // already in this file
+    uint32_t crc = calculate_crc32(&out, sizeof(out.sequence) + sizeof(out.payload));
+    out.crc32 = htonl(crc);
+
+    return zsock_sendto(sock, &out, sizeof(out), 0, (const struct sockaddr *)to, sizeof(*to));
+}
+
+
 /**
  * UDP server thread function - handles incoming UDP messages
  * This thread runs continuously, listening for UDP packets and responding
@@ -267,8 +301,8 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
     struct sockaddr_in bind_addr, client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
     
-    // 🚀 PERFORMANCE: Direct struct receive (eliminates memcpy overhead)
-    udp_packet_t packet; // ⚡ Direct to struct instead of buffer + casting
+    // PERFORMANCE: Direct struct receive (eliminates memcpy overhead)
+    udp_packet_t packet; // Direct to struct instead of buffer + casting
     
     int ret;
 
@@ -278,7 +312,7 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
 
     udp_sock = zsock_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (udp_sock < 0) {
-        LOG_ERR("Failed to create UDP socket: %d", udp_sock); // ⚡ Essential: socket creation failure
+        LOG_ERR("Failed to create UDP socket: %d", udp_sock); //Essential: socket creation failure
         return;
     }
 
@@ -289,55 +323,45 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
 
     ret = zsock_bind(udp_sock, (struct sockaddr *)&bind_addr, sizeof(bind_addr));
     if (ret < 0) {
-        LOG_ERR("Failed to bind UDP socket: %d", ret); // ⚡ Essential: bind failure
+        LOG_ERR("Failed to bind UDP socket: %d", ret); //Essential: bind failure
         zsock_close(udp_sock);
         return;
     }
 
-    LOG_INF("UDP server ready on port %d", UDP_PORT); // ⚡ Essential: startup confirmation
+    LOG_INF("UDP server ready on port %d", UDP_PORT);
 
-    while (1) {
-        //PERFORMANCE: Direct struct receive (no buffer copying)
-        ret = zsock_recvfrom(udp_sock, &packet, sizeof(packet), 0, // ⚡ Direct to struct
-                             (struct sockaddr *)&client_addr, &client_addr_len);
+     while (1) {
+        udp_packet_t packet;
+        struct sockaddr_in client_addr;
+        socklen_t client_addr_len = sizeof(client_addr);
+
+        int ret = zsock_recvfrom(udp_sock, &packet, sizeof(packet), 0,
+                                 (struct sockaddr *)&client_addr, &client_addr_len);
 
         if (ret == sizeof(udp_packet_t)) {
-            //TESTING: Print all packet values
             uint32_t recv_sequence = ntohl(packet.sequence);
-            uint64_t recv_payload = net_to_host_64(packet.payload);
-            uint32_t recv_crc = ntohl(packet.crc32);
-            
-            //LOG_INF("=== PACKET RECEIVED ===");
-            //LOG_INF("Sequence: %u", recv_sequence);
-            //LOG_INF("Payload:  0x%016llX", recv_payload);
-            //LOG_INF("CRC32:    0x%08X", recv_crc);
-            
-            // Calculate CRC32 for validation
-            uint32_t calculated_crc = calculate_crc32(&packet, 
-                sizeof(packet.sequence) + sizeof(packet.payload));
-            
-            //LOG_INF("Calc CRC: 0x%08X", calculated_crc);
-            
-            //TESTING: Clear match/mismatch indication
-            if (calculated_crc == recv_crc) {
-                //LOG_INF("CRC MATCH - Packet is valid!");
-                //gpio_pin_toggle_dt(&led); // Visual feedback
+            uint64_t recv_payload  = net_to_host_64(packet.payload);
+            uint32_t recv_crc      = ntohl(packet.crc32);
 
-                // Forward command to control system
+            uint32_t calc_crc = calculate_crc32(&packet,
+                                sizeof(packet.sequence) + sizeof(packet.payload));
+
+            if (calc_crc == recv_crc) {
+                // Forward to control as before
                 rov_send_command(recv_sequence, recv_payload);
-            } else {
-                LOG_ERR("CRC MISMATCH - Packet corrupted!");
-                LOG_ERR("Expected: 0x%08X, Got: 0x%08X", calculated_crc, recv_crc);
-            }
-            //LOG_INF("========================");
+
             
+                uint64_t current_bm = bm_get_current();
+                (void)send_udp_packet(udp_sock, &client_addr,
+                                      recv_sequence, current_bm);
+            } else {
+                LOG_ERR("CRC MISMATCH - drop");
+            }
         } else if (ret < 0) {
             LOG_ERR("UDP recv error: %d", ret);
             k_sleep(K_MSEC(100));
         } else {
-            //TESTING: Print wrong packet sizes for debugging
-            LOG_WRN("Wrong packet size: got %d bytes, expected %d bytes", 
-                    ret, sizeof(udp_packet_t));
+            LOG_WRN("Wrong packet size: got %d", ret);
         }
     }
 }
