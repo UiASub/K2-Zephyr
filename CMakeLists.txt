@@ -28,4 +28,5 @@ set(BOARD_DEBUG_RUNNER openocd)
 target_sources(app PRIVATE src/main.c
                            src/led.c
                            src/net.c
-                           src/control.c)
+                           src/control.c
+                           src/canbus.c)

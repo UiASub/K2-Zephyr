@@ -21,6 +21,7 @@
 #include "led.h"
 #include "net.h"
 #include "control.h"
+#include "canbus.h"
 
 // Register this source file as a log module named "k2_app" with INFO level
 // This allows us to use LOG_INF(), LOG_ERR(), etc. in our code
@@ -40,6 +41,11 @@ LOG_MODULE_REGISTER(k2_app, LOG_LEVEL_INF);
 int main(void)
 {
     LOG_INF("=== K2 Zephyr Application Starting ===");
+
+    if (canbus_init() == 0) {
+        LOG_INF("CAN ready - will send test frames");
+    }
+
     LOG_INF("Board: %s", CONFIG_BOARD);
     
     /* 
@@ -74,11 +80,22 @@ int main(void)
     LOG_INF("Starting main loop");
     LOG_INF("UDP server will validate structured packets (sequence + payload + CRC32)");
     LOG_INF("Payload will be forwarded to ROV control system");
-    
-    while (1) {  // Infinite loop - runs forever
+
+    // Example: drive at +3 A and keep sending at 10 Hz
+    while (1) {
+        (void)send_set_current(68, 3.0f);   // +3 A drive
+        k_sleep(K_MSEC(100));
+    }
+
+
+
+   /*/ while (1) {  // Infinite loop - runs forever
         
         // Increment counter and log current state
         //loop_count++;
+
+        //send test CAN frame periodically
+        send_test_frame();
         
         if (network_ready) {
             //LOG_INF("Loop #%u: Network ready, UDP server processing packets", loop_count);
@@ -90,7 +107,7 @@ int main(void)
 
         // Sleep for 10 seconds (longer interval for status updates)
         k_sleep(K_SECONDS(10));
-    }
+    } */
     
     // Cleanup (never reached in embedded systems)
     if (udp_sock >= 0) {
