@@ -58,7 +58,7 @@ west zephyr-export
 
 # Install Python dependencies
 Write-Host "Installing Python dependencies..." -ForegroundColor Green
-west packages pip --install
+pip install -r "$ZephyrPath\zephyr\scripts\requirements.txt"
 
 # Install Zephyr SDK
 Write-Host "Installing Zephyr SDK..." -ForegroundColor Green

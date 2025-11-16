@@ -119,9 +119,11 @@ west sdk install
 
 ## Build & flash
 
+Run `build.sh` or inside of `/K2-Zephyr` run:
+
 ```bash
-west build -b nucleo_f767zi K2-Zephyr -d build/app
-west flash -d build/app
+west build -b nucleo_f767zi
+west flash
 ```
 
 Optionally on WSL or if STM32CubeProgrammer not installed:

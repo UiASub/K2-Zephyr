@@ -136,9 +136,8 @@ if [ -d ~/zephyrproject/.venv ] && [ "$force" -eq 0 ] && [ "$update" -eq 0 ]; th
     log "Zephyr is installed, skipping install." 1
 elif [ -d ~/zephyrproject/.venv ] && [ "$force" -eq 1 ]; then
     echo "Force reinstall requested. Removing existing installation..."
-    rm -rf ~/zephyrproject/.venv
-    rm -rf ~/zephyrproject/.west
-    log "Installing Zephyr" 0
+    rm -rf ~/zephyrproject
+    log "Installing Zephyr again" 0
     installZephyr
 elif [ -d ~/zephyrproject/.venv ] && [ "$update" -eq 1 ]; then
     echo "Updating Zephyr installation..."
@@ -146,7 +145,7 @@ elif [ -d ~/zephyrproject/.venv ] && [ "$update" -eq 1 ]; then
     git pull
     cd ~/zephyrproject || exit 1
     west update
-    west packages pip --install
+    pip install -r ~/zephyrproject/zephyr/scripts/requirements.txt
     echo "Zephyr update complete!"
 else
     log "Installing Zephyr" 0
@@ -177,6 +176,7 @@ installZephyr ()
             fi
 
             # Activate virtual environment
+            #shellcheck source=/dev/null
             source ~/zephyrproject/.venv/bin/activate
 
             # Install west if not already installed
@@ -240,6 +240,7 @@ installZephyr ()
             fi
 
             # Activate virtual environment
+            #shellcheck source=/dev/null
             source ~/zephyrproject/.venv/bin/activate
 
             # Install west if not already installed
@@ -266,7 +267,7 @@ installZephyr ()
 
             # Install Python dependencies
             echo "Installing Python dependencies..."
-            west packages pip --install
+            pip install -r ~/zephyrproject/zephyr/scripts/requirements.txt
 
             # Installing SDK
             if [ "$skip_sdk" -eq 0 ]; then
@@ -314,6 +315,7 @@ installZephyr ()
             fi
 
             # Activate virtual environment
+            #shellcheck source=/dev/null
             source ~/zephyrproject/.venv/bin/activate
 
             # Initialize workspace if not already initialized
@@ -334,7 +336,7 @@ installZephyr ()
 
             # Install Python dependencies
             echo "Installing Python dependencies..."
-            west packages pip --install
+            pip install -r ~/zephyrproject/zephyr/scripts/requirements.txt
 
             # Installing SDK
             if [ "$skip_sdk" -eq 0 ]; then
@@ -351,7 +353,7 @@ installZephyr ()
                 git clone https://github.com/UiASub/K2-Zephyr.git
             fi
             cd ~/zephyrproject/K2-Zephyr || exit 1
-            
+
             echo "Zephyr setup complete!"
             ;;
         brew)
@@ -375,6 +377,7 @@ installZephyr ()
             fi
 
             # Activate virtual environment
+            #shellcheck source=/dev/null
             source ~/zephyrproject/.venv/bin/activate
 
             # Install west if not already installed
@@ -401,7 +404,7 @@ installZephyr ()
 
             # Install Python dependencies
             echo "Installing Python dependencies..."
-            west packages pip --install
+            pip install -r ~/zephyrproject/zephyr/scripts/requirements.txt
 
             # Installing SDK
             if [ "$skip_sdk" -eq 0 ]; then
