@@ -1,0 +1,25 @@
+{
+    "configurations": [
+        {
+            "name": "Zephyr ARM",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "~/zephyrproject/zephyr/include",
+                "~/zephyrproject/zephyr/include/zephyr",
+                "~/zephyrproject/zephyr/lib/libc/common/include",
+                "~/zephyrproject/zephyr/lib/libc/minimal/include",
+                "${workspaceFolder}/build/zephyr/include/generated",
+                "~/zephyr-sdk-VERSION/arm-zephyr-eabi/arm-zephyr-eabi/include"
+            ],
+            "defines": [
+                "CONFIG_BOARD_NUCLEO_F767ZI",
+                "__ZEPHYR__=1"
+            ],
+            "compilerPath": "~/zephyr-sdk-VERSION/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "gcc-arm"
+        }
+    ],
+    "version": 4
+}

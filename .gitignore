@@ -1,4 +1,14 @@
-.vscode
-.vscode/*
+# VS Code user settings (keep template, ignore customized version)
+.vscode/c_cpp_properties.json
+.vscode/.ropeproject
+
+# Build directories
 build/
 build/*
+
+# macOS
+.DS_Store
+
+# Python virtual environment
+.venv
+.venv/*
