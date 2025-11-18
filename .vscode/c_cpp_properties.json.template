@@ -29,7 +29,7 @@
                 "CONFIG_SOC_STM32F767XX=1",
                 "CONFIG_SYS_CLOCK_TICKS_PER_SEC=10000"
             ],
-            "compilerPath": "~/zephyr-sdk-VERSION/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc",
+            "compilerPath": "~/zephyr-sdk-0.17.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc",
             "cStandard": "c11",
             "cppStandard": "c++17",
             "intelliSenseMode": "gcc-arm"

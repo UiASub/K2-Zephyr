@@ -1,6 +1,7 @@
 # VS Code user settings (keep template, ignore customized version)
 .vscode/c_cpp_properties.json
 .vscode/.ropeproject
+.cache
 
 # Build directories
 build/
