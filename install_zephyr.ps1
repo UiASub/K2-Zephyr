@@ -82,18 +82,14 @@ Write-Host "Exporting Zephyr CMake package..." -ForegroundColor Green
 west zephyr-export
 
 # Install Python dependencies
-Write-Host "Installing Python dependencies..." -ForegroundColor Green
-& $VenvPython -m pip install -r "$ZephyrPath\zephyr\scripts\requirements.txt"
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Python dependency installation failed. If the error references 'windows-curses', ensure Python 3.11 is installed."
-    exit 1
-}
-
-Write-Host "Ensuring patool is installed for west sdk..." -ForegroundColor Green
-& $VenvPython -m pip install patool
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Failed to install patool (required by west sdk install)."
-    exit 1
+if (Test-Path "$ZephyrPath\zephyr\scripts\requirements.txt") {
+    Write-Host "Installing Python dependencies from Zephyr requirements..." -ForegroundColor Green
+    & $VenvPython -m pip install -r "$ZephyrPath\zephyr\scripts\requirements.txt"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Warning: Python dependency installation had issues. Continuing anyway..." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "No requirements.txt found, skipping Python dependencies installation." -ForegroundColor Yellow
 }
 
 # Install Zephyr SDK

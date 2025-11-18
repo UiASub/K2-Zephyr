@@ -6,12 +6,19 @@ Write-Host "Setting up Zephyr environment..."
 Set-Location "$HOME\zephyrproject"
 
 # Activate venv (PowerShell)
-if (Test-Path ~/zephyrproject/.venv/bin/Activate.ps1) {
-  ~/zephyrproject/.venv/bin/Activate.ps1
-} else {
-  Write-Host "Virtualenv activation script not found. "
-  exit 1
+$venvRoot = Join-Path -Path $HOME -ChildPath 'zephyrproject\.venv'
+$activateCandidates = @(
+    Join-Path -Path $venvRoot -ChildPath 'Scripts\Activate.ps1' # Windows
+)
+
+$activateScript = $activateCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+if (-not $activateScript) {
+    Write-Host "Virtualenv activation script not found under $venvRoot."
+    exit 1
 }
+
+& $activateScript
 
 Write-Host "Building K2-Zephyr project..."
 Set-Location "$HOME\zephyrproject\K2-Zephyr"
