@@ -21,6 +21,8 @@
 #include "led.h"
 #include "net.h"
 #include "control.h"
+#include "icm20948.h"
+#include <zephyr/sys/printk.h>
 
 // Register this source file as a log module named "k2_app" with INFO level
 // This allows us to use LOG_INF(), LOG_ERR(), etc. in our code
@@ -61,6 +63,9 @@ int main(void)
     
     // Start UDP server thread
     udp_server_start();
+
+    // 9dof IMU initialization
+    printk("Main started, IMU thread will print data...\n");
 
     /*
      * MAIN APPLICATION LOOP
