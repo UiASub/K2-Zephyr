@@ -3,19 +3,33 @@
         {
             "name": "Zephyr ARM",
             "includePath": [
+                "${workspaceFolder}/build/zephyr/include/generated",
                 "${workspaceFolder}/**",
                 "~/zephyrproject/zephyr/include",
                 "~/zephyrproject/zephyr/include/zephyr",
                 "~/zephyrproject/zephyr/lib/libc/common/include",
                 "~/zephyrproject/zephyr/lib/libc/minimal/include",
-                "${workspaceFolder}/build/zephyr/include/generated",
-                "~/zephyr-sdk-VERSION/arm-zephyr-eabi/arm-zephyr-eabi/include"
+                "~/zephyr-sdk-0.17.4/arm-zephyr-eabi/arm-zephyr-eabi/include",
+                "~/zephyrproject/zephyr/soc/st/stm32/stm32f7x",
+                "~/zephyrproject/zephyr/soc/st/stm32/common",
+                "~/zephyrproject/zephyr/modules/cmsis",
+                "~/zephyrproject/zephyr/modules/cmsis_6",
+                "~/zephyrproject/modules/hal/stm32/stm32cube/stm32f7xx/soc",
+                "~/zephyrproject/modules/hal/stm32/stm32cube/stm32f7xx/drivers/include",
+                "~/zephyrproject/modules/hal/stm32/stm32cube/common_ll/include"
+            ],
+            "forcedInclude": [
+                "${workspaceFolder}/build/zephyr/include/generated/zephyr/autoconf.h"
             ],
             "defines": [
                 "CONFIG_BOARD_NUCLEO_F767ZI",
-                "__ZEPHYR__=1"
+                "__ZEPHYR__=1",
+                "CONFIG_ARM=1",
+                "CONFIG_CPU_CORTEX_M7=1",
+                "CONFIG_SOC_STM32F767XX=1",
+                "CONFIG_SYS_CLOCK_TICKS_PER_SEC=10000"
             ],
-            "compilerPath": "~/zephyr-sdk-VERSION/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc",
+            "compilerPath": "~/zephyr-sdk-0.17.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc",
             "cStandard": "c11",
             "cppStandard": "c++17",
             "intelliSenseMode": "gcc-arm"

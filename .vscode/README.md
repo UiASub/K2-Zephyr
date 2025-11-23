@@ -22,6 +22,13 @@
 
 3. Your customized `c_cpp_properties.json` will be ignored by git, so your local changes won't be committed.
 
+4. You need to build the `src` to use the properties file, run `build.sh`, or inside of `/K2-Zephyr` run:
+
+```bash
+west build -b nucleo_f767zi
+west flash
+```
+
 ## Files
 
 - `c_cpp_properties.json.template` - Template file tracked by git (cross-platform)

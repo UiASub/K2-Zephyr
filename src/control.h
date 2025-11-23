@@ -3,10 +3,6 @@
 #include <zephyr/kernel.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 // Message structure for communication between threads
 typedef struct {
     uint32_t sequence;
@@ -28,7 +24,3 @@ void rov_send_command(uint32_t sequence, uint64_t payload);
 // 6DOF control function
 void rov_6dof_control(int8_t surge, int8_t sway, int8_t heave, 
                      int8_t roll, int8_t pitch, int8_t yaw);
-
-#ifdef __cplusplus
-}
-#endif
