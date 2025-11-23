@@ -28,36 +28,49 @@ jobs:
           new_tag="v$major.$minor.$patch"
           echo "tag=$new_tag" >> $GITHUB_OUTPUT
 
-      - name: Install deps for Zephyr 4.2
+      - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y \
-            git cmake ninja-build gperf python3-pip \
-            python3-setuptools python3-wheel xz-utils file \
-            make gcc gcc-multilib libsdl2-dev
+            git cmake ninja-build gperf python3-pip python3-setuptools \
+            python3-wheel xz-utils file make gcc gcc-multilib libsdl2-dev
 
           pip install west
 
-      - name: Init West & Zephyr 4.2 workspace
+      - name: Create West workspace & fetch Zephyr 4.2
         run: |
-          west init -l .
+          mkdir workspace
+          cd workspace
+
+          west init
           west update
+
+          # Export Zephyr env
           west zephyr-export
+
+          # Install Python deps
           pip install -r zephyr/scripts/requirements.txt
+
+      - name: Add application into workspace
+        run: |
+          cd workspace
+          mkdir app
+          cp -r $GITHUB_WORKSPACE/* app/
 
       - name: Build firmware (NUCLEO-F767ZI)
         run: |
-          west build -b stm32f767zi_nucleo -p always
+          cd workspace
+          west build -b stm32f767zi_nucleo app
 
       - name: Upload build output
         uses: actions/upload-artifact@v4
         with:
           name: firmware
           path: |
-            build/zephyr/*.bin
-            build/zephyr/*.hex
-            build/zephyr/*.elf
-            build/zephyr/*.map
+            workspace/build/zephyr/*.bin
+            workspace/build/zephyr/*.hex
+            workspace/build/zephyr/*.elf
+            workspace/build/zephyr/*.map
 
   release:
     needs: build
