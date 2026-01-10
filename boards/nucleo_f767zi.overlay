@@ -19,24 +19,45 @@
 	};
 };
 
-/* Enable SPI1 and attach the ICM20948 */
+
+/* Define PB5 as SPI1 MOSI to avoid conflict with Ethernet PA7 */
+&pinctrl {
+    /* Unused now, but kept for reference */
+    spi1_mosi_pb5: spi1_mosi_pb5 {
+        pinmux = <STM32_PINMUX('B', 5, AF5)>;
+    };
+};
+
+/* Disable HW SPI1 */
 &spi1 {
-	status = "okay";
+    status = "disabled";
+};
 
-	icm20948: icm20948@0 {
-		compatible = "invensense,icm20948";
-		reg = <0>;
-		status = "okay";
+/* Create Bit-Bang SPI Controller */
+/ {
+    spi_bb: spi-bitbang {
+        compatible = "zephyr,spi-bitbang";
+        status = "okay";
+        #address-cells = <1>;
+        #size-cells = <0>;
+        
+        /* D13 = PA5 */
+        clk-gpios = <&gpioa 5 GPIO_ACTIVE_HIGH>;
+        /* D4  = PF14 (actual D4 on Nucleo-144) */
+        mosi-gpios = <&gpiof 14 GPIO_ACTIVE_HIGH>;
+        /* D12 = PA6 */
+        miso-gpios = <&gpioa 6 GPIO_ACTIVE_HIGH>;
+        /* D10 = PD14 */
+        cs-gpios = <&gpiod 14 GPIO_ACTIVE_LOW>;
 
-		/* SPI parameters required by SPI_DT_SPEC_GET */
-		spi-max-frequency = <1000000>;   /* 1 MHz */
-
-		/* numeric values so we don't need #include in overlay */
-		duplex = <0>;                    /* 0 = SPI_FULL_DUPLEX */
-		frame-format = <0>;              /* 0 = SPI_FRAME_FORMAT_MOTOROLA */
-		spi-interframe-delay-ns = <0>;   /* no extra delay */
-
-		/* Adjust to your actual CS pin */
-		cs-gpios = <&gpioa 4 GPIO_ACTIVE_LOW>;
-	};
+        icm20948: icm20948@0 {
+            compatible = "invensense,icm20948";
+            reg = <0>;
+            status = "okay";
+            /* Bit-bang doesn't care about these as much, but driver checks them */
+            spi-max-frequency = <1000000>;
+            duplex = <0>;
+            frame-format = <0>;
+        };
+    };
 };

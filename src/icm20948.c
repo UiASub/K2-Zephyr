@@ -3,10 +3,12 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/spi.h>
 #include <zephyr/sys/printk.h>
+#include <zephyr/logging/log.h>
 
 #include "icm20948.h"
 
-/* DeviceTree node for the IMU on SPI1 */
+LOG_MODULE_REGISTER(icm20948, LOG_LEVEL_INF);
+
 #define ICM_NODE DT_NODELABEL(icm20948)
 
 BUILD_ASSERT(DT_NODE_HAS_STATUS(ICM_NODE, okay),
@@ -14,15 +16,13 @@ BUILD_ASSERT(DT_NODE_HAS_STATUS(ICM_NODE, okay),
 
 static const struct spi_dt_spec icm = SPI_DT_SPEC_GET(
     ICM_NODE,
-    SPI_OP_MODE_MASTER | SPI_WORD_SET(8) | SPI_TRANSFER_MSB, /* mode 0 */
+    SPI_OP_MODE_MASTER | SPI_WORD_SET(8) | SPI_TRANSFER_MSB,
     0
 );
 
-/* Simple helpers for SPI read/write */
-
 static int icm_write_reg(uint8_t reg, uint8_t val)
 {
-    uint8_t tx[2] = { (uint8_t)(reg & 0x7F), val }; /* bit7=0 for write */
+    uint8_t tx[2] = { (uint8_t)(reg & 0x7F), val };
 
     struct spi_buf buf = {
         .buf = tx,
@@ -38,53 +38,83 @@ static int icm_write_reg(uint8_t reg, uint8_t val)
 
 static int icm_read_reg(uint8_t reg, uint8_t *val)
 {
-    uint8_t tx = (uint8_t)(reg | 0x80); /* bit7=1 for read */
+    uint8_t tx[2] = {
+        (uint8_t)(reg | 0x80),
+        0xFF,
+    };
+    uint8_t rx[2] = {0};
 
     struct spi_buf txb = {
-        .buf = &tx,
-        .len = 1,
+        .buf = tx,
+        .len = sizeof(tx),   // 2 bytes
     };
     struct spi_buf rxb = {
-        .buf = val,
-        .len = 1,
+        .buf = rx,
+        .len = sizeof(rx),   // 2 bytes
     };
 
     struct spi_buf_set tx_set = {
         .buffers = &txb,
-        .count = 1,
+        .count   = 1,
     };
     struct spi_buf_set rx_set = {
         .buffers = &rxb,
-        .count = 1,
+        .count   = 1,
     };
 
-    return spi_transceive_dt(&icm, &tx_set, &rx_set);
+    int err = spi_transceive_dt(&icm, &tx_set, &rx_set);
+    if (err) {
+        return err;
+    }
+
+    *val = rx[1];
+    return 0;
 }
+
 
 static int icm_read_burst(uint8_t reg, uint8_t *data, size_t len)
 {
-    uint8_t tx = (uint8_t)(reg | 0x80);
+    /* We need 1 byte for the address + len data bytes */
+    uint8_t tx_buf[1 + 12];   /* 12 is enough for your 6 accel + 6 gyro bytes */
+    uint8_t rx_buf[1 + 12];
+
+    if (len > 12) {
+        return -EINVAL;
+    }
+
+    tx_buf[0] = (uint8_t)(reg | 0x80);  /* bit7=1 for read, start address */
+    for (size_t i = 1; i < 1 + len; i++) {
+        tx_buf[i] = 0xFF;              /* dummy bytes to clock out data */
+    }
 
     struct spi_buf txb = {
-        .buf = &tx,
-        .len = 1,
+        .buf = tx_buf,
+        .len = 1 + len,
     };
     struct spi_buf rxb = {
-        .buf = data,
-        .len = len,
+        .buf = rx_buf,
+        .len = 1 + len,
     };
 
     struct spi_buf_set tx_set = {
         .buffers = &txb,
-        .count = 1,
+        .count   = 1,
     };
     struct spi_buf_set rx_set = {
         .buffers = &rxb,
-        .count = 1,
+        .count   = 1,
     };
 
-    return spi_transceive_dt(&icm, &tx_set, &rx_set);
+    int err = spi_transceive_dt(&icm, &tx_set, &rx_set);
+    if (err) {
+        return err;
+    }
+
+    /* Skip the first dummy byte, copy only the data bytes */
+    memcpy(data, &rx_buf[1], len);
+    return 0;
 }
+
 
 /* Public API */
 
@@ -94,38 +124,77 @@ int icm20948_init(struct icm20948_data *dev)
     uint8_t who = 0;
 
     if (!device_is_ready(icm.bus)) {
-        printk("ICM20948: SPI bus not ready\n");
+        LOG_ERR("SPI bus not ready");
         return -ENODEV;
     }
 
-    /* store pointer in case you want it later */
     if (dev) {
         dev->spi = &icm;
     }
 
-    /* Wake up the device (bank 0) */
-    err = icm_write_reg(0x06, 0x01); /* PWR_MGMT_1: clk auto, not sleep */
+    LOG_INF("Checking WHO_AM_I first...");
+    /* WHO_AM_I check */
+    err = icm_read_reg(0x00, &who);
     if (err) {
-        printk("ICM20948: PWR_MGMT_1 write err %d\n", err);
+        LOG_ERR("WHO_AM_I read err %d", err);
         return err;
     }
 
-    err = icm_write_reg(0x07, 0x00); /* PWR_MGMT_2: all sensors on */
+    LOG_INF("WHO_AM_I = 0x%02X (expect 0xEA)", who);
+    if (who != 0xEA) {
+        LOG_WRN("Unexpected WHO_AM_I 0x%02X. Attempting reset anyway...", who);
+    }
+
+    /* --- Reset and wake (bank 0) --- */
+    LOG_INF("Resetting ICM20948...");
+    err = icm_write_reg(0x06, 0x41);   /* PWR_MGMT_1: reset + CLKSEL=1 */
     if (err) {
-        printk("ICM20948: PWR_MGMT_2 write err %d\n", err);
+        LOG_ERR("PWR_MGMT_1 reset err %d", err);
         return err;
     }
+    k_msleep(100);
+
+    err = icm_write_reg(0x06, 0x01);   /* PWR_MGMT_1: clk auto, not sleep */
+    if (err) {
+        LOG_ERR("PWR_MGMT_1 wake err %d", err);
+        return err;
+    }
+
+    err = icm_write_reg(0x07, 0x00);   /* PWR_MGMT_2: all accel+gyro on */
+    if (err) {
+        LOG_ERR("PWR_MGMT_2 write err %d", err);
+        return err;
+    }
+
+    /* Disable I2C, force SPI mode (USER_CTRL, bank 0, 0x03, bit4=I2C_IF_DIS) */
+    err = icm_write_reg(0x03, 0x10);
+    if (err) {
+        LOG_ERR("USER_CTRL write err %d", err);
+        return err;
+    }
+
+    /* Optional: configure accel/gyro full-scale in bank 2 (matches common examples)  */
+    err = icm_write_reg(0x7F, 0x20);   /* REG_BANK_SEL: bank 2 */
+    if (err) return err;
+
+    err = icm_write_reg(0x14, 0x01);   /* ACCEL_CONFIG: +/-2 g */
+    if (err) return err;
+
+    err = icm_write_reg(0x15, 0x00);   /* ACCEL_CONFIG_2: no self-test */
+    if (err) return err;
+
+    err = icm_write_reg(0x01, 0x01);   /* GYRO_CONFIG: +/-250 dps */
+    if (err) return err;
+
+    err = icm_write_reg(0x02, 0x00);   /* GYRO_CONFIG_2: no self-test */
+    if (err) return err;
+
+    /* Back to bank 0 for WHO_AM_I and data */
+    err = icm_write_reg(0x7F, 0x00);   /* REG_BANK_SEL: bank 0 */
+    if (err) return err;
 
     k_msleep(50);
 
-    /* WHO_AM_I (bank 0, 0x00) should be 0xEA */
-    err = icm_read_reg(0x00, &who);
-    if (err) {
-        printk("ICM20948: WHO_AM_I read err %d\n", err);
-        return err;
-    }
-
-    printk("ICM20948: WHO_AM_I = 0x%02X (expect 0xEA)\n", who);
     return 0;
 }
 
@@ -151,6 +220,19 @@ int icm20948_read_raw(struct icm20948_data *dev,
     return 0;
 }
 
+static int16_t last_ax, last_ay, last_az;
+static int16_t last_gx, last_gy, last_gz;
+
+void icm20948_get_latest(int16_t *accel, int16_t *gyro)
+{
+    accel[0] = last_ax;
+    accel[1] = last_ay;
+    accel[2] = last_az;
+    gyro[0]  = last_gx;
+    gyro[1]  = last_gy;
+    gyro[2]  = last_gz;
+}
+
 /* Thread entry: print to serial forever */
 
 void icm20948_task(void *p1, void *p2, void *p3)
@@ -159,12 +241,12 @@ void icm20948_task(void *p1, void *p2, void *p3)
     ARG_UNUSED(p2);
     ARG_UNUSED(p3);
 
-    printk("ICM20948 thread starting!\n");
+    LOG_INF("ICM20948 thread starting!");
 
     struct icm20948_data dev;
     int err = icm20948_init(&dev);
     if (err) {
-        printk("ICM20948: init failed (%d)\n", err);
+        LOG_ERR("ICM20948 init failed: %d", err);
         return;
     }
 
@@ -172,10 +254,11 @@ void icm20948_task(void *p1, void *p2, void *p3)
         int16_t ax, ay, az, gx, gy, gz;
         err = icm20948_read_raw(&dev, &ax, &ay, &az, &gx, &gy, &gz);
         if (!err) {
-            printk("ICM A:%6d %6d %6d  G:%6d %6d %6d\n",
-                   ax, ay, az, gx, gy, gz);
+            /* Store for external access */
+            last_ax = ax; last_ay = ay; last_az = az;
+            last_gx = gx; last_gy = gy; last_gz = gz;
         } else {
-            printk("ICM read err %d\n", err);
+            LOG_ERR("ICM read err %d", err);
         }
         k_msleep(200);
     }
@@ -183,11 +266,4 @@ void icm20948_task(void *p1, void *p2, void *p3)
 
 /* Define and start the IMU thread automatically at boot */
 
-K_THREAD_DEFINE(imu_tid,
-                2048,
-                icm20948_task,
-                NULL, NULL, NULL,
-                5,
-                0,
-                0);
-
+K_THREAD_DEFINE(imu_tid, 2048, icm20948_task, NULL, NULL, NULL, 5, 0, 0);

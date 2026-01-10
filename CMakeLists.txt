@@ -7,10 +7,8 @@ cmake_minimum_required(VERSION 3.20.0)
 # Export compile_commands.json for IDE IntelliSense
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Add device tree overlay for board-specific Ethernet configuration
-# MUST be set before find_package(Zephyr)
-# Disabled: board already provides correct Ethernet/PHY configuration
-# set(DTC_OVERLAY_FILE "boards/nucleo_f767zi.overlay")
+# Make the local dts/ tree (bindings and overlays) visible to the DTS compiler.
+list(APPEND DTS_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Find and load the Zephyr RTOS build system
 # ZEPHYR_BASE environment variable points to Zephyr installation

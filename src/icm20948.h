@@ -14,6 +14,8 @@ int icm20948_read_raw(struct icm20948_data *dev,
                       int16_t *ax, int16_t *ay, int16_t *az,
                       int16_t *gx, int16_t *gy, int16_t *gz);
 
+void icm20948_get_latest(int16_t *accel, int16_t *gyro);
+
 /* Thread entry for the IMU task */
 void icm20948_task(void *p1, void *p2, void *p3);
 
