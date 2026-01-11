@@ -4,7 +4,10 @@ Board docs: <https://docs.zephyrproject.org/latest/boards/st/nucleo_f767zi/doc/i
 
 Setup Guide: <https://docs.zephyrproject.org/latest/develop/getting_started/index.html>
 
+**IDE Setup:** [VS Code](#vscode-config) | [CLion](#clion-configuration)
+
 - **west**: 1.5.0
+- **Zephyr**: v4
 - **Zephyr SDK**: 0.17.4
 - **Python**: 3.12
 
@@ -264,3 +267,41 @@ In `.vscode` folder, add this and customize to your need
     "version": 4
 }
 ```
+
+## CLion Configuration
+
+CLion doesn't have native support for `west`-based Zephyr projects. You have two options:
+
+### Option 1: Use Terminal within CLion
+
+The simplest approach is to use CLion's built-in terminal with the virtual environment activated:
+
+1. Open the project in CLion
+2. Open the terminal (View → Tool Windows → Terminal)
+3. Activate the virtual environment:
+
+   ```bash
+   source ~/zephyrproject/.venv/bin/activate  # macOS/Linux
+   # or
+   . ~\zephyrproject\.venv\Scripts\Activate.ps1  # Windows PowerShell
+   ```
+
+4. Build and flash using `west` commands:
+
+   ```bash
+   west build -b nucleo_f767zi
+   west flash
+   ```
+
+### Option 2: Open as Makefile Project
+
+Alternatively, you can configure CLion to recognize it as a Makefile project and create custom build configurations:
+
+1. Open **Run → Edit Configurations**
+2. Click **+** → **Makefile Application**
+3. Set **Executable**: `west`
+4. Set **Program arguments**: `build -b nucleo_f767zi`
+5. Set **Working directory**: `/Users/USERNAME/zephyrproject/K2-Zephyr`
+6. Set **Environment variables**: `PATH=/Users/USERNAME/zephyrproject/.venv/bin:$PATH`
+
+Note: CLion is primarily designed for CMake-based projects. For full Zephyr integration, VS Code with the Zephyr extension may provide a better experience.

@@ -21,7 +21,8 @@ readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
 readonly YELLOW='\033[1;33m'
 readonly CYAN='\033[0;36m'
-readonly NC='\033[0m' # No Color
+readonly NC='\033[0m'
+
 # Log function with verbosity levels
 log() {
     local message="$1"
@@ -53,7 +54,7 @@ DESCRIPTION:
     Automatically installs and configures Zephyr RTOS development environment
     including Python virtual environment, west tool, Zephyr SDK, and all
     required dependencies for your operating system.
-    Supported platforms: macOS (Homebrew), Ubuntu/Debian (apt), Arch/Manjaro (pacman), and Fedora (dnf).
+    Supported platforms: macOS (Homebrew), Ubuntu/Debian (apt), and Fedora (dnf).
 OPTIONS:
     -h, --help, --usage, -?
         Display this help message and exit.
@@ -88,7 +89,6 @@ REQUIREMENTS:
     macOS:         Homebrew package manager
     Ubuntu/Debian: apt package manager (sudo access required)
     Fedora:        dnf package manager (sudo access required)
-    Arch/Manjaro:  pacman package manager (sudo access required)
 INSTALLATION PATH:
     ~/zephyrproject/        - Main workspace directory
     ~/zephyrproject/.venv   - Python virtual environment
@@ -132,11 +132,6 @@ detect_os() {
                 PACKAGE_MANAGER="apt"
                 log "Operating System: $OS" 1
                 log "Package Manager: apt" 1
-                ;;
-            arch|manjaro)
-                PACKAGE_MANAGER="pacman"
-                log "Operating System: $OS" 1
-                log "Package Manager: pacman" 1
                 ;;
             fedora)
                 PACKAGE_MANAGER="dnf"
@@ -257,18 +252,7 @@ install_dnf_dependencies() {
     sudo dnf install -y cmake ninja-build gperf dfu-util dtc wget which \
         python3 python3-devel python3-pip python3-tkinter xz file SDL2-devel
 }
-# Install dependencies for Pacman (Arch/Manjaro)
-install_pacman_dependencies() {
-    info "Installing dependencies via pacman..."
-    
-    sudo pacman -Syu --noconfirm
-    sudo pacman -S --noconfirm --needed \
-        git cmake ninja gperf ccache dfu-util dtc wget \
-        python python-pip python-setuptools python-wheel tk xz file make
-    
-    # Install python-west from AUR
-    install_west_from_aur
-}
+
 # Install west from AUR (Arch Linux User Repository)
 install_west_from_aur() {
     info "Installing west from AUR..."
@@ -418,9 +402,6 @@ install_zephyr() {
             ;;
         dnf)
             install_dnf_dependencies
-            ;;
-        pacman)
-            install_pacman_dependencies
             ;;
         brew)
             install_brew_dependencies

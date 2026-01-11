@@ -4,6 +4,20 @@
 # Require minimum CMake version for modern features
 cmake_minimum_required(VERSION 3.20.0)
 
+# Set default board if not specified
+if(NOT DEFINED BOARD)
+  set(BOARD nucleo_f767zi)
+endif()
+
+# Set BOARD in cache so west can see it
+set(BOARD ${BOARD} CACHE STRING "Board name" FORCE)
+
+# Suppress CMake build type warning (Zephyr uses its own optimization flags)
+set(NO_BUILD_TYPE_WARNING ON)
+
+# Force CMake to use the Zephyr venv Python instead of system Python
+set(Python3_EXECUTABLE "$ENV{HOME}/zephyrproject/.venv/bin/python" CACHE FILEPATH "Python executable" FORCE)
+
 # Export compile_commands.json for IDE IntelliSense
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

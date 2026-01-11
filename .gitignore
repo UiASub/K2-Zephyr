@@ -2,6 +2,8 @@
 .vscode/c_cpp_properties.json
 .vscode/.ropeproject
 .cache
+.idea/
+src/.idea/
 
 # Build directories
 build/
