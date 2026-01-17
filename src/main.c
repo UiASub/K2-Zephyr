@@ -55,9 +55,6 @@ int main(void)
     // Initialize ROV control system
     rov_control_init();
 
-    // Initialize resource monitor
-    resource_monitor_init();
-
     // Initialize networking
     network_init();
 

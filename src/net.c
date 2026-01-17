@@ -14,15 +14,14 @@
 
 // Include LED control header for visual feedback
 #include "led.h"
+#include "net.h"
 #include "control.h"
 #include "icm20948.h"
 #include "resource_monitor.h"
 
 LOG_MODULE_REGISTER(net_app, LOG_LEVEL_WRN);
 
-// Network configuration constants
-#define UDP_PORT 12345          // Port number for UDP server to listen on
-#define RECV_BUFFER_SIZE 64     // Buffer size for incoming UDP messages
+#define RECV_BUFFER_SIZE 64
 
 // Packet structure definition
 typedef struct {
@@ -31,12 +30,8 @@ typedef struct {
     uint32_t crc32;     // CRC32 checksum
 } __attribute__((packed)) udp_packet_t;
 
-// Static IP configuration - customize these for your network
-#define STATIC_IP_ADDR "192.168.1.100"   // Device's static IP address
-#define STATIC_NETMASK "255.255.255.0"   // Subnet mask
-#define STATIC_GATEWAY "192.168.1.1"     // Default gateway address
-#define TOPSIDE_IP "192.168.1.255"
-#define SENSOR_PORT 5002
+/* Use addresses from net.h */
+#define STATIC_IP_ADDR STATIC_DEVICE_IP
 
 // Network management callback structure for handling interface events
 static struct net_mgmt_event_callback mgmt_cb;
@@ -227,18 +222,17 @@ void network_init(void)
  * @param length: Length of data in bytes
  * @return: Calculated CRC32 value
  */
-static inline uint32_t calculate_crc32(const void *data, size_t length)
+uint32_t crc32_calc(const void *data, size_t length)
 {
     const uint8_t *bytes = (const uint8_t *)data;
     uint32_t crc = 0xFFFFFFFF;
-    
-    // CRC32 polynomial (IEEE 802.3)
+
     for (size_t i = 0; i < length; i++) {
         uint8_t index = (crc ^ bytes[i]) & 0xFF;
         crc = (crc >> 8) ^ crc32_table[index];
     }
-    
-    return ~crc;  // Final inversion
+
+    return ~crc;
 }
 
 /**
@@ -285,7 +279,7 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
     memset(&bind_addr, 0, sizeof(bind_addr));
     bind_addr.sin_family = AF_INET;
     bind_addr.sin_addr.s_addr = INADDR_ANY;
-    bind_addr.sin_port = htons(UDP_PORT);
+    bind_addr.sin_port = htons(UDP_COMMAND_PORT);
 
     ret = zsock_bind(udp_sock, (struct sockaddr *)&bind_addr, sizeof(bind_addr));
     if (ret < 0) {
@@ -294,7 +288,7 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
         return;
     }
 
-    LOG_INF("UDP server ready on port %d", UDP_PORT); // ⚡ Essential: startup confirmation
+    LOG_INF("UDP server ready on port %d", UDP_COMMAND_PORT); // ⚡ Essential: startup confirmation
 
     while (1) {
         //PERFORMANCE: Direct struct receive (no buffer copying)
@@ -313,7 +307,7 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
             //LOG_INF("CRC32:    0x%08X", recv_crc);
             
             // Calculate CRC32 for validation
-            uint32_t calculated_crc = calculate_crc32(&packet, 
+            uint32_t calculated_crc = crc32_calc(&packet, 
                 sizeof(packet.sequence) + sizeof(packet.payload));
             
             //LOG_INF("Calc CRC: 0x%08X", calculated_crc);
