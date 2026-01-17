@@ -1,0 +1,22 @@
+description: |
+  Invensense ICM-20948 9-axis IMU attached to an SPI bus.
+
+compatible: "invensense,icm20948"
+
+include:
+  - sensor-device.yaml
+  - spi-device.yaml
+
+properties:
+  cs-gpios:
+    type: phandle-array
+    required: false
+    description: GPIO specifier for the SPI chip-select line (optional if parent handles CS).
+
+  int-gpios:
+    type: phandle-array
+    description: Optional interrupt pin. The signal is active high by default.
+
+  reset-gpios:
+    type: phandle-array
+    description: Optional reset pin that can be driven low to reset the device.

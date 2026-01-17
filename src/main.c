@@ -21,6 +21,8 @@
 #include "led.h"
 #include "net.h"
 #include "control.h"
+#include <zephyr/sys/printk.h>
+#include "icm20948.h"
 
 // Register this source file as a log module named "k2_app" with INFO level
 // This allows us to use LOG_INF(), LOG_ERR(), etc. in our code
