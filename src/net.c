@@ -16,6 +16,7 @@
 #include "led.h"
 #include "control.h"
 #include "icm20948.h"
+#include "resource_monitor.h"
 
 // Declare this module for logging purposes
 LOG_MODULE_DECLARE(k2_app);
@@ -328,14 +329,19 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
 
                 // Forward command to control system
                 rov_send_command(recv_sequence, recv_payload);
+
+                // Update resource monitor stats
+                resource_monitor_inc_udp_rx();
             } else {
                 LOG_ERR("CRC MISMATCH - Packet corrupted!");
                 LOG_ERR("Expected: 0x%08X, Got: 0x%08X", calculated_crc, recv_crc);
+                resource_monitor_inc_udp_errors();
             }
             //LOG_INF("========================");
             
         } else if (ret < 0) {
             LOG_ERR("UDP recv error: %d", ret);
+            resource_monitor_inc_udp_errors();
             k_sleep(K_MSEC(100));
         } else {
             //TESTING: Print wrong packet sizes for debugging

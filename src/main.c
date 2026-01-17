@@ -23,6 +23,7 @@
 #include "control.h"
 #include <zephyr/sys/printk.h>
 #include "icm20948.h"
+#include "resource_monitor.h"
 
 // Register this source file as a log module named "k2_app" with INFO level
 // This allows us to use LOG_INF(), LOG_ERR(), etc. in our code
@@ -54,13 +55,19 @@ int main(void)
 
     // Initialize ROV control system
     rov_control_init();
-    
+
+    // Initialize resource monitor
+    resource_monitor_init();
+
     // Initialize networking
     network_init();
 
     // Start ROV control thread
     rov_control_start();
-    
+
+    // Start resource monitor thread
+    resource_monitor_start();
+
     // Start UDP server thread
     udp_server_start();
 
