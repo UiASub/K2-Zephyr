@@ -26,18 +26,18 @@ K_MSGQ_DEFINE(rov_command_queue, sizeof(rov_command_t), 10, 4);
 void rov_6dof_control(int8_t surge, int8_t sway, int8_t heave, 
                      int8_t roll, int8_t pitch, int8_t yaw)
 {
-    LOG_INF("=== 6DOF CONTROL ===");
-    LOG_INF("Surge: %+4d", surge);   // Forward/Back
-    LOG_INF("Sway:  %+4d", sway);    // Left/Right
-    LOG_INF("Heave: %+4d", heave);   // Up/Down
-    LOG_INF("Roll:  %+4d", roll);    // Roll rotation
-    LOG_INF("Pitch: %+4d", pitch);   // Pitch rotation
-    LOG_INF("Yaw:   %+4d", yaw);     // Yaw rotation
+    //LOG_INF("=== 6DOF CONTROL ===");
+    //LOG_INF("Surge: %+4d", surge);   // Forward/Back
+    //LOG_INF("Sway:  %+4d", sway);    // Left/Right
+    //LOG_INF("Heave: %+4d", heave);   // Up/Down
+    //LOG_INF("Roll:  %+4d", roll);    // Roll rotation
+    //LOG_INF("Pitch: %+4d", pitch);   // Pitch rotation
+    //LOG_INF("Yaw:   %+4d", yaw);     // Yaw rotation
     
     // TODO: Apply your matrix calculations here
     // Example: thruster_output = thruster_matrix * [surge, sway, heave, roll, pitch, yaw]
     
-    LOG_INF("==================");
+    //LOG_INF("==================");
 }
 
 /**
