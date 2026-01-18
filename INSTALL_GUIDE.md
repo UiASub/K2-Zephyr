@@ -28,7 +28,17 @@ You will need [winget](https://aka.ms/getwinget) to install dependencies.
 
 ```bash
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest https://raw.githubusercontent.com/UiASub/K2-Zephyr/main/install_zephyr.ps1 -OutFile install_zephyr.ps1"
+# Use script:
 powershell -ExecutionPolicy Bypass -File install_zephyr.ps1
+```
+
+Default install path is ***$HOME\zephyrproject***
+> Edit default *Zephyr Path* with `-ZephyrPath`
+Example:
+
+```powershell
+# Use script:
+powershell -ExecutionPolicy Bypass -File install_zephyr.ps1 -ZephyrPath "C:\Users\you\zephyrproject"
 ```
 
 ## Manual Installation
@@ -65,7 +75,7 @@ west update
 west zephyr-export
 west packages pip --install
 cd $Env:HOMEPATH\zephyrproject\zephyr
-west sdk install --version 0.17.4
+west sdk install --version 0.17.2
 ```
 
 ### Ubuntu
@@ -102,7 +112,7 @@ west update
 west zephyr-export
 west packages pip --install
 cd ~/zephyrproject/zephyr
-west sdk install --version 0.17.4
+west sdk install --version 0.17.2
 ```
 
 Or using `uv`:
@@ -117,7 +127,7 @@ west update
 west zephyr-export
 west packages pip --install
 cd ~/zephyrproject/zephyr
-west sdk install --version 0.17.4
+west sdk install --version 0.17.2
 ```
 
 ### MacOS
@@ -143,7 +153,7 @@ west update
 west zephyr-export
 west packages pip --install
 cd ~/zephyrproject/zephyr
-west sdk install --version 0.17.4
+west sdk install --version 0.17.2
 ```
 
 Or using `uv`:
@@ -158,7 +168,7 @@ west update
 west zephyr-export
 west packages pip --install
 cd ~/zephyrproject/zephyr
-west sdk install --version 0.17.4
+west sdk install --version 0.17.2
 ```
 
 ## STM32CubeProgrammer PATH (if installed from ST website)

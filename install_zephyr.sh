@@ -5,7 +5,7 @@ set -euo pipefail  # Exit on error, undefined variables, and pipe failures
 # Constants
 readonly ZEPHYR_PATH="$HOME/zephyrproject"
 readonly WEST_VERSION="1.5.0"
-readonly SDK_VERSION="0.17.4"
+readonly SDK_VERSION="0.17.2"
 readonly ZEPHYR_VERSION="v4.2.0"
 readonly PYTHON_MIN_VERSION="3.10"
 readonly PYTHON_PREFERRED="3.11"
@@ -101,8 +101,8 @@ EXIT CODES:
     3 - Installation failure
 DOCUMENTATION:
     Zephyr Project: https://docs.zephyrproject.org/
-    Getting Started: https://docs.zephyrproject.org/latest/develop/getting_started/
-    Zephyr SDK: https://docs.zephyrproject.org/latest/develop/toolchains/zephyr_sdk.html
+    Getting Started: https://docs.zephyrproject.org/4.2.0/develop/getting_started/
+    Zephyr SDK: https://docs.zephyrproject.org/4.2.0/develop/toolchains/zephyr_sdk.html
     K2 Zephyr: https://github.com/UiASub/K2-Zephyr
 EOF
 }

@@ -2,16 +2,20 @@
 # Run as Administrator
 # Run with: powershell -ExecutionPolicy Bypass -File install_zephyr.ps1
 
+param(
+    [string]$ZephyrPath = "$HOME\zephyrproject"
+)
+
 $ErrorActionPreference = "Stop"
-$ZephyrPath = "$HOME\zephyrproject"
 $ZephyrVersion = "v4.2.0"
-$SdkVersion = "0.17.4"
+$ZephyrManifest = "https://github.com/zephyrproject-rtos/zephyr"
+$SdkVersion = "0.17.2"
 $WestVersion = "1.5.0"
 
 # 1. Check for Administrator privileges
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Write-Warning "This script requires Administrator privileges for package installation."
-    Write-Warning "Please right-click PowerShell and select 'Run as Administrator'."
+    Write-Warning "Please select 'Run as Administrator' for your terminal."
     exit 1
 }
 
@@ -63,7 +67,7 @@ if (-not (Test-Path "$ZephyrPath\.west")) {
     Write-Host "Initializing Zephyr workspace..." -ForegroundColor Green
     # Install west globally first to bootstrap
     pip install west==$WestVersion
-    west init $ZephyrPath --mr $ZephyrVersion
+    west init $ZephyrPath -m $ZephyrManifest --mr $ZephyrVersion
 } else {
     Write-Host "Zephyr workspace already initialized." -ForegroundColor Gray
 }

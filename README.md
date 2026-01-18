@@ -3,7 +3,7 @@
 Board docs: <https://docs.zephyrproject.org/4.2.0/boards/st/nucleo_f767zi/doc/index.html>
 
 - **west**: 1.5.0
-- **Zephyr SDK**: 0.17.4
+- **Zephyr SDK**: 0.17.2
 - **Zephyr project**: v4.2.0
 - **Python**: 3.12
 
