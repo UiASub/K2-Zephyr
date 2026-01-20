@@ -6,24 +6,26 @@
 
 /* Commands (from datatypes.h in VESC firmware) */
 typedef enum {
-    COMM_SET_DUTY = 0,
+    COMM_SET_DUTY = 5,
     COMM_SET_CURRENT = 1,
     COMM_GET_VALUES = 4,
     COMM_CAN_FORWARD = 34,
     COMM_CAN_SET_CURRENT = 35
 } COMM_PACKET_ID;
 
+/* CRC16-CCITT used by VESC (polynomial 0x1021) */
 static uint16_t crc16(const uint8_t *data, size_t len)
 {
-    uint16_t crc = 0xFFFF;
+    uint16_t crc = 0;
 
     for (size_t i = 0; i < len; i++) {
-        crc ^= data[i];
+        crc ^= (uint16_t)data[i] << 8;
         for (int j = 0; j < 8; j++) {
-            if (crc & 1)
-                crc = (crc >> 1) ^ 0xA001;
-            else
-                crc >>= 1;
+            if (crc & 0x8000) {
+                crc = (crc << 1) ^ 0x1021;
+            } else {
+                crc <<= 1;
+            }
         }
     }
     return crc;
@@ -59,6 +61,20 @@ static size_t vesc_wrap_packet(uint8_t *buf,
     return idx;
 }
 
+size_t vesc_build_set_duty(uint8_t *buf, float duty)
+{
+    uint8_t payload[8];
+    size_t p = 0;
+
+    payload[p++] = COMM_SET_DUTY;
+
+    /* Duty is -100000 to +100000 (representing -100% to +100%) */
+    int32_t duty_val = (int32_t)(duty * 100000.0f);
+    buf_append_int32(payload, duty_val, &p);
+
+    return vesc_wrap_packet(buf, payload, p);
+}
+
 size_t vesc_build_set_current(uint8_t *buf, float current)
 {
     uint8_t payload[8];
@@ -70,6 +86,13 @@ size_t vesc_build_set_current(uint8_t *buf, float current)
     buf_append_int32(payload, current_mA, &p);
 
     return vesc_wrap_packet(buf, payload, p);
+}
+
+size_t vesc_build_get_values(uint8_t *buf)
+{
+    uint8_t payload[1];
+    payload[0] = COMM_GET_VALUES;
+    return vesc_wrap_packet(buf, payload, 1);
 }
 
 size_t vesc_build_can_set_current(uint8_t *buf,
