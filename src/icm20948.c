@@ -193,7 +193,7 @@ int icm20948_init(struct icm20948_data *dev)
     err = icm_write_reg(0x7F, 0x00);   /* REG_BANK_SEL: bank 0 */
     if (err) return err;
 
-    k_msleep(50);
+    k_msleep(200);
 
     return 0;
 }

@@ -395,7 +395,7 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
             zsock_sendto(sock, buffer, len, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
         }
 
-        k_msleep(50); // 20 Hz
+        k_msleep(200); 
     }
 }
 

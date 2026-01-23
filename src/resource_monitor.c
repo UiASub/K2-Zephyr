@@ -1,19 +1,12 @@
 /*
  * Resource Monitor - System telemetry for topside monitoring
- *
- * Monitors and reports:
- * - CPU usage (via idle thread timing)
- * - Heap memory usage
- * - Thread stack usage
- * - Network statistics
- *
- * Sends telemetry packets via UDP to topside application
  */
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/sys/sys_heap.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -22,35 +15,32 @@
 
 LOG_MODULE_DECLARE(k2_app);
 
-/* Configuration */
-#define TELEMETRY_INTERVAL_MS  1000  /* Send telemetry every 1 second */
+#define TELEMETRY_INTERVAL_MS  2000
 #define MONITOR_STACK_SIZE     2048
-#define MONITOR_PRIORITY       9     /* Lower priority than control threads */
+#define MONITOR_PRIORITY       9
+#define THREAD_COUNT_UPDATE_INTERVAL 5  /* Update thread count every N telemetry cycles */
 
-/* CPU measurement window */
-#define CPU_SAMPLE_PERIOD_MS   100
-#define CPU_SAMPLES            10
-
-/* Thread stack and data */
 K_THREAD_STACK_DEFINE(monitor_thread_stack, MONITOR_STACK_SIZE);
 static struct k_thread monitor_thread_data;
 
-/* Telemetry state */
 static uint32_t telemetry_sequence = 0;
 static int telemetry_sock = -1;
 static struct sockaddr_in topside_addr;
 static bool topside_configured = false;
 
-/* UDP counters (thread-safe via atomic) */
 static atomic_t udp_rx_count = ATOMIC_INIT(0);
 static atomic_t udp_rx_errors = ATOMIC_INIT(0);
 
-/* CPU usage measurement */
 static uint8_t cpu_usage_percent = 0;
 static uint64_t last_idle_cycles = 0;
 static uint64_t last_total_cycles = 0;
 
-/* Pre-computed CRC32 table (same as net.c) */
+/* Cached values to reduce k_thread_foreach calls */
+static struct k_thread *cached_idle_thread = NULL;
+static uint8_t cached_thread_count = 0;
+static uint32_t thread_count_update_counter = 0;
+
+/* CRC32 lookup table (IEEE 802.3) */
 static const uint32_t crc32_table[256] = {
     0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA, 0x076DC419, 0x706AF48F,
     0xE963A535, 0x9E6495A3, 0x0EDB8832, 0x79DCB8A4, 0xE0D5E91E, 0x97D2D988,
@@ -97,9 +87,6 @@ static const uint32_t crc32_table[256] = {
     0xB40BBE37, 0xC30C8EA1, 0x5A05DF1B, 0x2D02EF8D
 };
 
-/**
- * Calculate CRC32 checksum
- */
 static inline uint32_t calculate_crc32(const void *data, size_t length)
 {
     const uint8_t *bytes = (const uint8_t *)data;
@@ -113,9 +100,6 @@ static inline uint32_t calculate_crc32(const void *data, size_t length)
     return ~crc;
 }
 
-/**
- * Parse IPv4 address string into sockaddr_in
- */
 static int parse_ipv4_to_sockaddr(const char *ip_str, uint16_t port,
                                    struct sockaddr_in *addr)
 {
@@ -134,21 +118,25 @@ static int parse_ipv4_to_sockaddr(const char *ip_str, uint16_t port,
     return 0;
 }
 
-/**
- * Callback to find idle thread
- */
 static void find_idle_thread_callback(const struct k_thread *thread, void *user_data)
 {
     struct k_thread **idle_thread_ptr = (struct k_thread **)user_data;
 
-    /* Skip if already found */
     if (*idle_thread_ptr != NULL) {
         return;
     }
 
     const char *name = k_thread_name_get((k_tid_t)thread);
-    if (name && strcmp(name, "idle") == 0) {
+    /* Zephyr names idle threads "idle 00", "idle 01", etc. for each CPU */
+    if (name && strncmp(name, "idle", 4) == 0) {
         *idle_thread_ptr = (struct k_thread *)thread;
+    }
+}
+
+static void cache_idle_thread(void)
+{
+    if (cached_idle_thread == NULL) {
+        k_thread_foreach(find_idle_thread_callback, &cached_idle_thread);
     }
 }
 
@@ -161,25 +149,18 @@ static void update_cpu_usage(void)
         uint64_t total_cycles = stats.execution_cycles;
         uint64_t idle_cycles = 0;
 
-        /* Get idle thread stats */
-        struct k_thread *idle_thread = NULL;
-
-        /* Find idle thread by iterating threads */
-        k_thread_foreach(find_idle_thread_callback, &idle_thread);
-
-        if (idle_thread) {
+        /* Use cached idle thread instead of searching every time */
+        if (cached_idle_thread) {
             k_thread_runtime_stats_t idle_stats;
-            if (k_thread_runtime_stats_get(idle_thread, &idle_stats) == 0) {
+            if (k_thread_runtime_stats_get(cached_idle_thread, &idle_stats) == 0) {
                 idle_cycles = idle_stats.execution_cycles;
             }
         }
 
-        /* Calculate CPU usage as percentage */
         uint64_t delta_total = total_cycles - last_total_cycles;
         uint64_t delta_idle = idle_cycles - last_idle_cycles;
 
         if (delta_total > 0) {
-            /* CPU usage = 100% - idle% */
             uint64_t busy_cycles = delta_total - delta_idle;
             cpu_usage_percent = (uint8_t)((busy_cycles * 100) / delta_total);
             if (cpu_usage_percent > 100) {
@@ -191,25 +172,10 @@ static void update_cpu_usage(void)
         last_idle_cycles = idle_cycles;
     }
 #else
-    /* Fallback: simple timing-based estimation */
-    static int64_t last_check_time = 0;
-    int64_t now = k_uptime_get();
-
-    if (last_check_time == 0) {
-        last_check_time = now;
-        return;
-    }
-
-    /* Without runtime stats, we can't accurately measure CPU */
-    /* Report 0 to indicate measurement not available */
     cpu_usage_percent = 0;
-    last_check_time = now;
 #endif
 }
 
-/**
- * Thread count callback for k_thread_foreach
- */
 static void thread_count_callback(const struct k_thread *thread, void *user_data)
 {
     ARG_UNUSED(thread);
@@ -217,52 +183,54 @@ static void thread_count_callback(const struct k_thread *thread, void *user_data
     (*count)++;
 }
 
-/**
- * Count active threads
- */
-static uint8_t count_threads(void)
+static void update_thread_count(void)
 {
-    uint8_t count = 0;
-
-    k_thread_foreach(thread_count_callback, &count);
-
-    return count;
+    /* Only update thread count periodically to reduce overhead */
+    if (thread_count_update_counter == 0) {
+        uint8_t count = 0;
+        k_thread_foreach(thread_count_callback, &count);
+        cached_thread_count = count;
+    }
+    thread_count_update_counter++;
+    if (thread_count_update_counter >= THREAD_COUNT_UPDATE_INTERVAL) {
+        thread_count_update_counter = 0;
+    }
 }
 
-/**
- * Get heap memory statistics
- * Note: Full heap tracking requires k_heap with CONFIG_SYS_HEAP_RUNTIME_STATS.
- * This implementation reports SRAM size from Kconfig as a baseline.
- */
 static void get_heap_stats(uint16_t *free_kb, uint16_t *total_kb, uint8_t *used_percent)
 {
-    /* Report total SRAM from Kconfig (set by board devicetree) */
+#if defined(CONFIG_SYS_HEAP_RUNTIME_STATS) && defined(CONFIG_HEAP_MEM_POOL_SIZE) && (CONFIG_HEAP_MEM_POOL_SIZE > 0)
+    struct sys_memory_stats stats;
+
+    sys_heap_runtime_stats_get(NULL, &stats);
+    *total_kb = (uint16_t)((stats.free_bytes + stats.allocated_bytes) / 1024);
+    *free_kb = (uint16_t)(stats.free_bytes / 1024);
+    if (*total_kb > 0) {
+        *used_percent = (uint8_t)((stats.allocated_bytes * 100) /
+                                   (stats.free_bytes + stats.allocated_bytes));
+    } else {
+        *used_percent = 0;
+    }
+#else
+    /* No heap stats available - report static SRAM size */
 #ifdef CONFIG_SRAM_SIZE
     *total_kb = CONFIG_SRAM_SIZE;
 #else
-    *total_kb = 512;  /* Default for STM32F767 */
+    *total_kb = 512;
 #endif
-
-    /* Without a tracked heap, we can't report free memory accurately */
-    *free_kb = 0;
+    *free_kb = *total_kb;  /* Assume all free if we can't measure */
     *used_percent = 0;
+#endif
 }
 
-/**
- * Build telemetry packet with current system state
- */
 void resource_monitor_get_telemetry(telemetry_packet_t *telemetry)
 {
     memset(telemetry, 0, sizeof(*telemetry));
 
-    /* Basic info */
     telemetry->sequence = htonl(telemetry_sequence);
     telemetry->uptime_ms = htonl((uint32_t)k_uptime_get());
-
-    /* CPU usage */
     telemetry->cpu_usage_percent = cpu_usage_percent;
 
-    /* Memory stats */
     uint16_t free_kb, total_kb;
     uint8_t used_percent;
     get_heap_stats(&free_kb, &total_kb, &used_percent);
@@ -270,21 +238,15 @@ void resource_monitor_get_telemetry(telemetry_packet_t *telemetry)
     telemetry->heap_total_kb = htons(total_kb);
     telemetry->heap_used_percent = used_percent;
 
-    /* Thread count */
-    telemetry->thread_count = count_threads();
+    telemetry->thread_count = cached_thread_count;
 
-    /* Network stats */
     telemetry->udp_rx_count = htonl((uint32_t)atomic_get(&udp_rx_count));
     telemetry->udp_rx_errors = htonl((uint32_t)atomic_get(&udp_rx_errors));
 
-    /* Calculate CRC32 over all fields except CRC itself */
     size_t crc_data_len = sizeof(telemetry_packet_t) - sizeof(uint32_t);
     telemetry->crc32 = htonl(calculate_crc32(telemetry, crc_data_len));
 }
 
-/**
- * Send telemetry packet to topside
- */
 static int send_telemetry(void)
 {
     if (!topside_configured || telemetry_sock < 0) {
@@ -306,34 +268,34 @@ static int send_telemetry(void)
     return 0;
 }
 
-/**
- * Resource monitor thread - periodically collects and sends telemetry
- */
 static void resource_monitor_thread(void *arg1, void *arg2, void *arg3)
 {
     ARG_UNUSED(arg1);
     ARG_UNUSED(arg2);
     ARG_UNUSED(arg3);
 
-    /* Wait for network to be ready */
     while (!network_ready) {
         k_sleep(K_MSEC(100));
     }
 
-    /* Create UDP socket for telemetry */
+    /* Cache idle thread pointer once at startup */
+    cache_idle_thread();
+
+    /* Initial thread count */
+    update_thread_count();
+
     telemetry_sock = zsock_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (telemetry_sock < 0) {
         LOG_ERR("Failed to create telemetry socket: %d", telemetry_sock);
         return;
     }
 
-    LOG_INF("Resource monitor started, telemetry port %d", TELEMETRY_UDP_PORT);
+    LOG_INF("Resource monitor started on port %d", TELEMETRY_UDP_PORT);
 
     while (1) {
-        /* Update measurements */
         update_cpu_usage();
+        update_thread_count();
 
-        /* Send telemetry if topside is configured */
         if (topside_configured) {
             send_telemetry();
         }
@@ -342,26 +304,15 @@ static void resource_monitor_thread(void *arg1, void *arg2, void *arg3)
     }
 }
 
-/**
- * Initialize resource monitor
- */
 void resource_monitor_init(void)
 {
-    LOG_INF("Initializing resource monitor...");
-
-    /* Reset counters */
     atomic_set(&udp_rx_count, 0);
     atomic_set(&udp_rx_errors, 0);
     telemetry_sequence = 0;
 
-    /* Set default topside address (can be changed later) */
-    /* Default: same subnet, common topside port */
-    resource_monitor_set_topside("192.168.1.1", TELEMETRY_UDP_PORT);
+    resource_monitor_set_topside("192.168.1.5", TELEMETRY_UDP_PORT);
 }
 
-/**
- * Start the resource monitor thread
- */
 void resource_monitor_start(void)
 {
     k_tid_t tid = k_thread_create(&monitor_thread_data,
@@ -375,37 +326,27 @@ void resource_monitor_start(void)
 
     if (tid != NULL) {
         k_thread_name_set(tid, "res_monitor");
-        LOG_INF("Resource monitor thread created");
     } else {
         LOG_ERR("Failed to create resource monitor thread");
     }
 }
 
-/**
- * Configure topside address for telemetry
- */
 void resource_monitor_set_topside(const char *ip_addr, uint16_t port)
 {
     if (parse_ipv4_to_sockaddr(ip_addr, port, &topside_addr) == 0) {
         topside_configured = true;
-        LOG_INF("Topside configured: %s:%u", ip_addr, port);
+        LOG_INF("Topside: %s:%u", ip_addr, port);
     } else {
         LOG_ERR("Invalid topside address: %s", ip_addr);
         topside_configured = false;
     }
 }
 
-/**
- * Increment UDP receive counter (called from net.c)
- */
 void resource_monitor_inc_udp_rx(void)
 {
     atomic_inc(&udp_rx_count);
 }
 
-/**
- * Increment UDP error counter (called from net.c)
- */
 void resource_monitor_inc_udp_errors(void)
 {
     atomic_inc(&udp_rx_errors);
