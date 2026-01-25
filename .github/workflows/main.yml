@@ -1,0 +1,160 @@
+name: Build & Auto Release (Zephyr 4.2 – NUCLEO-F767ZI – Optimized)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+
+    steps:
+      ###########################################################################
+      # MASSIVE DISK CLEANUP (crucial to avoid "no space left" on GitHub runner)
+      ###########################################################################
+      - name: Free disk space on runner
+        run: |
+          echo "Before cleanup:"
+          df -h
+
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/lib/jvm
+          sudo rm -rf /opt/hostedtoolcache
+          sudo rm -rf /opt/google
+          sudo rm -rf /usr/lib/google-cloud-sdk
+
+          sudo apt clean
+
+          echo "After cleanup:"
+          df -h
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      ###########################################################################
+      # Auto-increment release version
+      ###########################################################################
+      - name: Determine next version
+        id: version
+        run: |
+          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          version=${latest_tag#v}
+          IFS='.' read -r major minor patch <<< "$version"
+          patch=$((patch + 1))
+          new_tag="v$major.$minor.$patch"
+          echo "tag=$new_tag" >> $GITHUB_OUTPUT
+
+      ###########################################################################
+      # System deps
+      ###########################################################################
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            git cmake ninja-build gperf python3-pip python3-setuptools \
+            python3-wheel xz-utils file make gcc gcc-multilib libsdl2-dev
+
+          pip install west
+
+      ###########################################################################
+      # ZEPHYR SDK (MINIMAL ARM TOOLCHAIN ONLY)
+      ###########################################################################
+      - name: Install Zephyr SDK 0.17.4 (ARM only)
+        run: |
+          cd /tmp
+          wget https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/zephyr-sdk-0.17.4_linux-x86_64.tar.xz
+          tar -xf zephyr-sdk-0.17.4_linux-x86_64.tar.xz
+
+          sudo mv zephyr-sdk-0.17.4 /opt/zephyr-sdk
+
+          # Install ONLY arm-zephyr-eabi to save 4+ GB
+          /opt/zephyr-sdk/setup.sh -t arm-zephyr-eabi
+
+          echo "ZEPHYR_TOOLCHAIN_VARIANT=zephyr" >> $GITHUB_ENV
+          echo "ZEPHYR_SDK_INSTALL_DIR=/opt/zephyr-sdk" >> $GITHUB_ENV
+
+      ###########################################################################
+      # West workspace (Zephyr 4.2.0)
+      ###########################################################################
+      - name: Create West workspace & checkout Zephyr 4.2.0
+        run: |
+          mkdir -p /tmp/ws
+          cd /tmp/ws
+
+          west init -m https://github.com/zephyrproject-rtos/zephyr --mr v4.2.0
+          west update
+
+          west zephyr-export
+
+          pip install -r zephyr/scripts/requirements.txt
+
+      - name: Add application into workspace
+        run: |
+          cd /tmp/ws
+          mkdir app
+          cp -r $GITHUB_WORKSPACE/* app/
+
+      ###########################################################################
+      # BUILD
+      ###########################################################################
+      - name: Build firmware (nucleo_f767zi)
+        run: |
+          cd /tmp/ws
+          west build -b nucleo_f767zi app
+
+      ###########################################################################
+      # CLEANUP BEFORE UPLOADING (free space again)
+      ###########################################################################
+      - name: Cleanup runner caches
+        run: |
+          pip cache purge
+          rm -rf ~/.cache
+
+          df -h
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: |
+            /tmp/ws/build/zephyr/*.bin
+            /tmp/ws/build/zephyr/*.hex
+            /tmp/ws/build/zephyr/*.elf
+            /tmp/ws/build/zephyr/*.map
+
+  ###############################################################################
+  # RELEASE JOB
+  ###############################################################################
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.build.outputs.tag }}
+          name: Release ${{ needs.build.outputs.tag }}
+          draft: false
+          prerelease: false
+          files: |
+            *.bin
+            *.hex
+            *.elf
+            *.map
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

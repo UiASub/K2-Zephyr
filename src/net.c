@@ -15,6 +15,7 @@
 // Include LED control header for visual feedback
 #include "led.h"
 #include "control.h"
+#include "icm20948.h"
 
 // Declare this module for logging purposes
 LOG_MODULE_DECLARE(k2_app);
@@ -34,6 +35,8 @@ typedef struct {
 #define STATIC_IP_ADDR "192.168.1.100"   // Device's static IP address
 #define STATIC_NETMASK "255.255.255.0"   // Subnet mask
 #define STATIC_GATEWAY "192.168.1.1"     // Default gateway address
+#define TOPSIDE_IP "192.168.1.255"
+#define SENSOR_PORT 5002
 
 // Network management callback structure for handling interface events
 static struct net_mgmt_event_callback mgmt_cb;
@@ -341,6 +344,56 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
         }
     }
 }
+
+void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
+{
+    ARG_UNUSED(arg1); ARG_UNUSED(arg2); ARG_UNUSED(arg3);
+    
+    int sock;
+    struct sockaddr_in dest_addr;
+    char buffer[128];
+    int16_t acc[3], gyro[3];
+
+    while (!network_ready) {
+        k_sleep(K_MSEC(100));
+    }
+
+    sock = zsock_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock < 0) {
+        LOG_ERR("Failed to create sensor UDP socket");
+        return;
+    }
+
+    dest_addr.sin_family = AF_INET;
+    dest_addr.sin_port = htons(SENSOR_PORT);
+
+    int on = 1;
+    zsock_setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
+    zsock_inet_pton(AF_INET, TOPSIDE_IP, &dest_addr.sin_addr);
+
+
+    LOG_INF("Sensor UDP sender started (Target: 192.168.1.2:%d)", SENSOR_PORT);
+
+    while (1) {
+        icm20948_get_latest(acc, gyro);
+
+        // JSON format matching Topside/routes.py expectation for "9dof"
+        // It expects a dict. Routes.py: get_section("9dof").
+        // DataHandler reads file. So we need a Receiver on PC side to write to file.
+        // Our receiver will expect JSON.
+        int len = snprintf(buffer, sizeof(buffer), 
+            "{\"9dof\":{\"accel\":[%d,%d,%d],\"gyro\":[%d,%d,%d]}}",
+            acc[0], acc[1], acc[2], gyro[0], gyro[1], gyro[2]);
+
+        if (len > 0) {
+            zsock_sendto(sock, buffer, len, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+        }
+
+        k_msleep(50); // 20 Hz
+    }
+}
+
+K_THREAD_DEFINE(sensor_tid, 2048, sensor_sender_thread, NULL, NULL, NULL, 7, 0, 0);
 
 /**
  * Start the UDP server by creating and launching the server thread

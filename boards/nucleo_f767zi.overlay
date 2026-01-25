@@ -1,10 +1,3 @@
-/*
- * Device Tree Overlay for NUCLEO-F767ZI Ethernet Configuration
- * 
- * This overlay configures the STM32F767ZI's built-in Ethernet MAC
- * to work with the LAN8742A PHY chip on the NUCLEO board.
- */
-
 &mac {
 	status = "okay";
 	pinctrl-0 = <&eth_mdc_pc1 &eth_mdio_pa2 &eth_rxd0_pc4 &eth_rxd1_pc5
@@ -24,4 +17,47 @@
 		reg = <0>;
 		status = "okay";
 	};
+};
+
+
+/* Define PB5 as SPI1 MOSI to avoid conflict with Ethernet PA7 */
+&pinctrl {
+    /* Unused now, but kept for reference */
+    spi1_mosi_pb5: spi1_mosi_pb5 {
+        pinmux = <STM32_PINMUX('B', 5, AF5)>;
+    };
+};
+
+/* Disable HW SPI1 */
+&spi1 {
+    status = "disabled";
+};
+
+/* Create Bit-Bang SPI Controller */
+/ {
+    spi_bb: spi-bitbang {
+        compatible = "zephyr,spi-bitbang";
+        status = "okay";
+        #address-cells = <1>;
+        #size-cells = <0>;
+        
+        /* D13 = PA5 */
+        clk-gpios = <&gpioa 5 GPIO_ACTIVE_HIGH>;
+        /* D4  = PF14 (actual D4 on Nucleo-144) */
+        mosi-gpios = <&gpiof 14 GPIO_ACTIVE_HIGH>;
+        /* D12 = PA6 */
+        miso-gpios = <&gpioa 6 GPIO_ACTIVE_HIGH>;
+        /* D10 = PD14 */
+        cs-gpios = <&gpiod 14 GPIO_ACTIVE_LOW>;
+
+        icm20948: icm20948@0 {
+            compatible = "invensense,icm20948";
+            reg = <0>;
+            status = "okay";
+            /* Bit-bang doesn't care about these as much, but driver checks them */
+            spi-max-frequency = <1000000>;
+            duplex = <0>;
+            frame-format = <0>;
+        };
+    };
 };
