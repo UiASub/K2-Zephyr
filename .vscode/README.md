@@ -16,13 +16,9 @@
    Copy-Item .vscode/c_cpp_properties.json.template .vscode/c_cpp_properties.json
    ```
 
-2. Edit `.vscode/c_cpp_properties.json` and replace:
-   - `VERSION` with your actual SDK version (e.g., `0.17.4`)
-   - The `~` (tilde) automatically expands to your home directory on all platforms
+2. Your customized `c_cpp_properties.json` will be ignored by git, so your local changes won't be committed.
 
-3. Your customized `c_cpp_properties.json` will be ignored by git, so your local changes won't be committed.
-
-4. You need to build the `src` to use the properties file, run `build.sh`, or inside of `/K2-Zephyr` run:
+3. You need to build the `src` to use the properties file, run `build.sh`, or inside of `/K2-Zephyr` run:
 
 ```bash
 west build -b nucleo_f767zi
