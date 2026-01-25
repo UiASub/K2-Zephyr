@@ -1,27 +1,18 @@
-# build.ps1
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Write-Host "Setting up Zephyr environment..."
-Set-Location "$HOME\zephyrproject"
+$workspace = Join-Path -Path $HOME -ChildPath 'zephyrproject'
+$venvActivate = Join-Path -Path $workspace -ChildPath '.venv\Scripts\Activate.ps1'
+$projectPath = Join-Path -Path $workspace -ChildPath 'K2-Zephyr'
 
-# Activate venv (PowerShell)
-$venvRoot = Join-Path -Path $HOME -ChildPath 'zephyrproject\.venv'
-$activateCandidates = @(
-    Join-Path -Path $venvRoot -ChildPath 'Scripts\Activate.ps1' # Windows
-)
-
-$activateScript = $activateCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-if (-not $activateScript) {
-    Write-Host "Virtualenv activation script not found under $venvRoot."
+if (-not (Test-Path $venvActivate)) {
+    Write-Host "Virtualenv activation script not found: $venvActivate"
     exit 1
 }
 
-& $activateScript
+& $venvActivate
 
-Write-Host "Building K2-Zephyr project..."
-Set-Location "$HOME\zephyrproject\K2-Zephyr"
+Set-Location $projectPath
 west build -p -b nucleo_f767zi
 
 Write-Host "Build complete! Flash with: west flash"

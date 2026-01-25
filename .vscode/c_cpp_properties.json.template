@@ -9,7 +9,7 @@
                 "~/zephyrproject/zephyr/include/zephyr",
                 "~/zephyrproject/zephyr/lib/libc/common/include",
                 "~/zephyrproject/zephyr/lib/libc/minimal/include",
-                "~/zephyr-sdk-0.17.4/arm-zephyr-eabi/arm-zephyr-eabi/include",
+                "~/zephyr-sdk-0.17.2/arm-zephyr-eabi/arm-zephyr-eabi/include",
                 "~/zephyrproject/zephyr/soc/st/stm32/stm32f7x",
                 "~/zephyrproject/zephyr/soc/st/stm32/common",
                 "~/zephyrproject/zephyr/modules/cmsis",
@@ -29,7 +29,7 @@
                 "CONFIG_SOC_STM32F767XX=1",
                 "CONFIG_SYS_CLOCK_TICKS_PER_SEC=10000"
             ],
-            "compilerPath": "~/zephyr-sdk-0.17.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc",
+            "compilerPath": "~/zephyr-sdk-0.17.2/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc",
             "cStandard": "c11",
             "cppStandard": "c++17",
             "intelliSenseMode": "gcc-arm"
