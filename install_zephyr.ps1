@@ -26,8 +26,11 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 }
 
 # 2. Install dependencies via winget
-Invoke-Step "Enable winget (App Installer)" {
+try {
+    Write-Host ">>> Enable winget (App Installer)" -ForegroundColor Cyan
     Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe
+} catch {
+    Write-Warning "Failed to register App Installer (winget should already be installed): $_"
 }
 
 $packages = @(
@@ -45,8 +48,8 @@ if (Get-Command winget -ErrorAction SilentlyContinue) {
     foreach ($pkg in $packages) {
         Write-Host "Installing/Updating $pkg..." -ForegroundColor Gray
         winget install $pkg --source winget --accept-package-agreements --accept-source-agreements --silent
-        if ($LASTEXITCODE -ne 0) {
-            throw "winget install failed for $pkg"
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne -1978335189) {
+            Write-Warning "Failed to install $pkg (exit code: $LASTEXITCODE). May already be installed or failed."
         }
     }
 } else {
@@ -54,11 +57,8 @@ if (Get-Command winget -ErrorAction SilentlyContinue) {
     exit 1
 }
 
-Invoke-Step "Update PATH with 7-Zip" {
-    [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "Machine") + ";C:\Program Files\7-Zip", "Machine")
-}
-
-# 3. Refresh Environment Variables
+# 3. Refresh Environment Variables (pick up newly installed tools)
+Write-Host "Refreshing environment variables..." -ForegroundColor Cyan
 foreach($level in "Machine","User") {
    [Environment]::GetEnvironmentVariables($level).GetEnumerator() | ForEach-Object {
        if($_.Name -ne "PSModulePath") { # Avoid breaking PS modules
@@ -66,6 +66,16 @@ foreach($level in "Machine","User") {
        }
    }
 }
+
+# Also explicitly add common tool paths to current session
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+
+Write-Host "Verifying Git installation..." -ForegroundColor Cyan
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Error "Git is not found in PATH after installation. Please restart PowerShell and run the script again."
+    exit 1
+}
+Write-Host "Git found: $(git --version)" -ForegroundColor Green
 
 # 4. Create and activate virtual environment (Python 3.11)
 if (-not (Test-Path "$ZephyrPath\.venv")) {
@@ -98,10 +108,8 @@ Set-Location $ZephyrPath
 Invoke-Step "west update" { west update }
 Invoke-Step "west zephyr-export" { west zephyr-export }
 
-$pipPackages = (west packages pip) -replace "`r","" | Where-Object { $_ -ne "" }
-if ($pipPackages.Count -gt 0) {
-    Invoke-Step "pip install (west packages pip)" { pip install $pipPackages }
-}
+Write-Host "Installing Python dependencies..." -ForegroundColor Cyan
+pip install -r "$ZephyrPath\zephyr\scripts\requirements.txt"
 
 Set-Location "$ZephyrPath\zephyr"
 Invoke-Step "west sdk install --toolchains arm-zephyr-eabi" { west sdk install --toolchains arm-zephyr-eabi }
@@ -113,9 +121,9 @@ if (-not (Test-Path "$ZephyrPath\\K2-Zephyr")) {
 }
 
 Write-Host "`nZephyr setup complete!" -ForegroundColor Green
-Write-Host "=========================================" -ForegroundColor Green
-Write-Host "Remember to install STM32CubeProgrammer for faster flashing. OpenOCD works as an alternative." -ForegroundColor Yellow
-Write-Host "=========================================" -ForegroundColor Green
+Write-Host "=========================================" -ForegroundColor Red
+Write-Host "Remember to install STM32CubeProgrammer (see docs)." -ForegroundColor Yellow
+Write-Host "=========================================" -ForegroundColor Red
 Write-Host "Location: $ZephyrPath" -ForegroundColor Gray
 Write-Host "IMPORTANT: Always activate the environment before working:" -ForegroundColor Yellow
 Write-Host ". $ZephyrPath\.venv\Scripts\Activate.ps1" -ForegroundColor White
