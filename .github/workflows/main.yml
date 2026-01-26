@@ -1,8 +1,6 @@
-name: Build & Auto Release (Zephyr 4.2 – NUCLEO-F767ZI – Optimized)
+name: Build & Release (Zephyr 4.2 – NUCLEO-F767ZI – Optimized)
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
