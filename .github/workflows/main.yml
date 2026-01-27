@@ -1,7 +1,14 @@
 name: Build & Release (Zephyr 4.2 – NUCLEO-F767ZI – Optimized)
 
+# Action evnts: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#running-your-workflow-only-when-a-push-of-specific-tags-occurs
+# Tag syntax: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#example-including-branches-and-tags
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+
 
 jobs:
   build:
@@ -39,17 +46,12 @@ jobs:
           fetch-depth: 0
 
       ###########################################################################
-      # Auto-increment release version
+      # Get the pushed tag
       ###########################################################################
-      - name: Determine next version
+      - name: Get pushed tag
         id: version
         run: |
-          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          version=${latest_tag#v}
-          IFS='.' read -r major minor patch <<< "$version"
-          patch=$((patch + 1))
-          new_tag="v$major.$minor.$patch"
-          echo "tag=$new_tag" >> $GITHUB_OUTPUT
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       ###########################################################################
       # System deps

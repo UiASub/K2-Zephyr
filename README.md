@@ -38,3 +38,14 @@ chmod +x install_zephyr.sh
 ```
 
 use `./install_zephyr.sh -h` to see help
+
+## Release
+
+To create a new release, push a tag:
+
+```bash
+git tag v0.X.X
+git push origin v0.X.X
+```
+
+This triggers the GitHub Actions workflow to build and release the firmware.
