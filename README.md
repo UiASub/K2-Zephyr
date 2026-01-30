@@ -1,10 +1,10 @@
 # NUCLEO-F767ZI + Zephyr
 
-Board docs: <https://docs.zephyrproject.org/latest/boards/st/nucleo_f767zi/doc/index.html>
+Board docs: <https://docs.zephyrproject.org/4.2.0/boards/st/nucleo_f767zi/doc/index.html>
 
 UiASub Setup Guide: <https://wiki.uiasub.no/k2zephyr/>
 
-Official Setup Guide: <https://docs.zephyrproject.org/latest/develop/getting_started/index.html>
+Official Setup Guide: <https://docs.zephyrproject.org/4.2.0/develop/getting_started/index.html>
 
 ## Required versions
 
