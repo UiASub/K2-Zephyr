@@ -1,4 +1,7 @@
 #include "vesc_protocol.h"
+#include <zephyr/logging/log.h>
+
+LOG_MODULE_REGISTER(vesc_proto, LOG_LEVEL_DBG);
 
 /* Packet markers */
 #define VESC_START_BYTE  0x02
@@ -7,10 +10,7 @@
 /* Commands (from datatypes.h in VESC firmware) */
 typedef enum {
     COMM_SET_DUTY = 5,
-    COMM_SET_CURRENT = 1,
-    COMM_GET_VALUES = 4,
     COMM_CAN_FORWARD = 34,
-    COMM_CAN_SET_CURRENT = 35
 } COMM_PACKET_ID;
 
 /* CRC16-CCITT used by VESC (polynomial 0x1021) */
@@ -70,43 +70,30 @@ size_t vesc_build_set_duty(uint8_t *buf, float duty)
 
     /* Duty is -100000 to +100000 (representing -100% to +100%) */
     int32_t duty_val = (int32_t)(duty * 100000.0f);
+    
+    LOG_DBG("UART duty input: %d/1000 -> raw: %d", (int)(duty * 1000), duty_val);
+    
     buf_append_int32(payload, duty_val, &p);
 
     return vesc_wrap_packet(buf, payload, p);
 }
 
-size_t vesc_build_set_current(uint8_t *buf, float current)
+/* Build CAN forwarded duty command (COMM_FORWARD_CAN) */
+size_t vesc_build_set_duty_can(uint8_t *buf, uint8_t can_id, float duty)
 {
-    uint8_t payload[8];
+    uint8_t payload[16];
     size_t p = 0;
 
-    payload[p++] = COMM_SET_CURRENT;
+    payload[p++] = COMM_CAN_FORWARD;  // 34
+    payload[p++] = can_id;             // CAN ID (e.g., 118)
+    payload[p++] = COMM_SET_DUTY;      // 5
 
-    int32_t current_mA = (int32_t)(current * 1000.0f);
-    buf_append_int32(payload, current_mA, &p);
-
-    return vesc_wrap_packet(buf, payload, p);
-}
-
-size_t vesc_build_get_values(uint8_t *buf)
-{
-    uint8_t payload[1];
-    payload[0] = COMM_GET_VALUES;
-    return vesc_wrap_packet(buf, payload, 1);
-}
-
-size_t vesc_build_can_set_current(uint8_t *buf,
-                                  uint8_t can_id,
-                                  float current)
-{
-    uint8_t payload[10];
-    size_t p = 0;
-
-    payload[p++] = COMM_CAN_SET_CURRENT;
-    payload[p++] = can_id;
-
-    int32_t current_mA = (int32_t)(current * 1000.0f);
-    buf_append_int32(payload, current_mA, &p);
+    /* Duty is -100000 to +100000 (representing -100% to +100%) */
+    int32_t duty_val = (int32_t)(duty * 100000.0f);
+    
+    LOG_DBG("CAN[%d] duty input: %d/1000 -> raw: %d", can_id, (int)(duty * 1000), duty_val);
+    
+    buf_append_int32(payload, duty_val, &p);
 
     return vesc_wrap_packet(buf, payload, p);
 }
