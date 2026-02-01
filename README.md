@@ -17,6 +17,8 @@ Official Setup Guide: <https://docs.zephyrproject.org/4.2.0/develop/getting_star
 
 ## Quick Installation
 
+See [intsall guide](https://wiki.uiasub.no/k2zephyr/INSTALL_GUIDE/) for STM32CubeProgrammer (if installed, continue)
+
 ### Windows in PowerShell (Admin)
 
 ```bash
