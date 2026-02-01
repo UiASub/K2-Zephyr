@@ -245,9 +245,9 @@ install_dnf_dependencies() {
     info "Installing dependencies via dnf..."
 
     sudo dnf upgrade -y
-    sudo dnf group install development-tools -y
+    sudo dnf install @development-tools -y
     sudo dnf install -y git cmake ninja-build gperf ccache dfu-util dtc wget \
-        which xz file make gcc gcc-multilib g++ SDL2-devel \
+        xz file make gcc gcc-c++ SDL2-devel \
         file-devel python3-devel python3-tkinter openocd
 }
 
@@ -266,6 +266,7 @@ install_brew_dependencies() {
     brew update
 
     brew install cmake ninja gperf python3 python-tk ccache qemu dtc libmagic wget openocd
+}
 
 # Create Python virtual environment
 create_venv() {
