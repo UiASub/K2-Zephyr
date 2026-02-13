@@ -5,7 +5,7 @@
 #include "control.h"
 #include "led.h"
 
-LOG_MODULE_DECLARE(k2_app);
+LOG_MODULE_REGISTER(rov_control, LOG_LEVEL_INF);
 
 // Thread stack and data
 K_THREAD_STACK_DEFINE(rov_control_stack, 2048);
@@ -26,18 +26,11 @@ K_MSGQ_DEFINE(rov_command_queue, sizeof(rov_command_t), 10, 4);
 void rov_6dof_control(int8_t surge, int8_t sway, int8_t heave, 
                      int8_t roll, int8_t pitch, int8_t yaw)
 {
-    LOG_INF("=== 6DOF CONTROL ===");
-    LOG_INF("Surge: %+4d", surge);   // Forward/Back
-    LOG_INF("Sway:  %+4d", sway);    // Left/Right
-    LOG_INF("Heave: %+4d", heave);   // Up/Down
-    LOG_INF("Roll:  %+4d", roll);    // Roll rotation
-    LOG_INF("Pitch: %+4d", pitch);   // Pitch rotation
-    LOG_INF("Yaw:   %+4d", yaw);     // Yaw rotation
+    LOG_DBG("6DOF S:%+4d W:%+4d H:%+4d R:%+4d P:%+4d Y:%+4d",
+            surge, sway, heave, roll, pitch, yaw);
     
     // TODO: Apply your matrix calculations here
     // Example: thruster_output = thruster_matrix * [surge, sway, heave, roll, pitch, yaw]
-    
-    LOG_INF("==================");
 }
 
 /**
@@ -46,7 +39,7 @@ void rov_6dof_control(int8_t surge, int8_t sway, int8_t heave,
 static void rov_set_light(uint8_t brightness)
 {
     if (brightness > 0) {
-        LOG_INF("Light: %d%% (%d/255)", (brightness * 100) / 255, brightness);
+        LOG_DBG("Light: %d%% (%d/255)", (brightness * 100) / 255, brightness);
         // TODO: Control light PWM
     }
 }
@@ -57,7 +50,7 @@ static void rov_set_light(uint8_t brightness)
 static void rov_set_manipulator(uint8_t position)
 {
     if (position > 0) {
-        LOG_INF("Manipulator: %d", position);
+        LOG_DBG("Manipulator: %d", position);
         // TODO: Control manipulator servo
     }
 }
@@ -73,14 +66,14 @@ static void rov_control_thread(void *arg1, void *arg2, void *arg3)
     
     rov_command_t command;
     
-    LOG_INF("ROV Control thread started");
-    LOG_INF("Waiting for 6DOF commands...");
+    LOG_DBG("ROV Control thread started");
+    LOG_DBG("Waiting for 6DOF commands...");
     
     while (1) {
         // Wait for a command from the network thread
         if (k_msgq_get(&rov_command_queue, &command, K_FOREVER) == 0) {
             
-            LOG_INF("Processing ROV command #%u", command.sequence);
+            LOG_DBG("Processing ROV command #%u", command.sequence);
             
             // Call 6DOF function with parsed values
             rov_6dof_control(command.surge, command.sway, command.heave,
@@ -109,8 +102,8 @@ static void rov_control_thread(void *arg1, void *arg2, void *arg3)
  */
 void rov_control_init(void)
 {
-    LOG_INF("Initializing ROV 6DOF control system...");
-    LOG_INF("Command queue capacity: 10 commands");
+    LOG_INF("ROV control init");
+    LOG_DBG("Command queue capacity: 10 commands");
     
     // TODO: Initialize hardware components here
     // Examples:
@@ -138,7 +131,7 @@ void rov_control_start(void)
                                K_NO_WAIT);
     
     if (thread_id != NULL) {
-        LOG_INF("ROV 6DOF control thread started successfully");
+        LOG_DBG("ROV control thread started");
     } else {
         LOG_ERR("Failed to start ROV control thread");
     }

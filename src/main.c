@@ -21,7 +21,6 @@
 #include "led.h"
 #include "net.h"
 #include "control.h"
-#include <zephyr/sys/printk.h>
 #include "icm20948.h"
 
 // Register this source file as a log module named "k2_app" with INFO level
@@ -74,8 +73,8 @@ int main(void)
     //uint32_t loop_count = 0; // Count main loop iterations
     
     LOG_INF("Starting main loop");
-    LOG_INF("UDP server will validate structured packets (sequence + payload + CRC32)");
-    LOG_INF("Payload will be forwarded to ROV control system");
+    LOG_DBG("UDP server will validate structured packets (sequence + payload + CRC32)");
+    LOG_DBG("Payload will be forwarded to ROV control system");
     
     while (1) {  // Infinite loop - runs forever
         
@@ -83,11 +82,9 @@ int main(void)
         //loop_count++;
         
         if (network_ready) {
-            //LOG_INF("Loop #%u: Network ready, UDP server processing packets", loop_count);
-            LOG_INF("Network ready, UDP server processing packets");
+            LOG_DBG("Network ready, UDP server processing packets");
         } else {
-            //LOG_INF("Loop #%u: Waiting for network...", loop_count);
-            LOG_INF("Network not ready, waiting...");
+            LOG_DBG("Network not ready, waiting...");
         }
 
         // Sleep for 10 seconds (longer interval for status updates)

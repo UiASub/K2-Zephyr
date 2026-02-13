@@ -2,7 +2,6 @@
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/spi.h>
-#include <zephyr/sys/printk.h>
 #include <zephyr/logging/log.h>
 
 #include "icm20948.h"
@@ -132,7 +131,7 @@ int icm20948_init(struct icm20948_data *dev)
         dev->spi = &icm;
     }
 
-    LOG_INF("Checking WHO_AM_I first...");
+    LOG_DBG("Checking WHO_AM_I...");
     /* WHO_AM_I check */
     err = icm_read_reg(0x00, &who);
     if (err) {
@@ -140,13 +139,13 @@ int icm20948_init(struct icm20948_data *dev)
         return err;
     }
 
-    LOG_INF("WHO_AM_I = 0x%02X (expect 0xEA)", who);
+    LOG_DBG("WHO_AM_I = 0x%02X (expect 0xEA)", who);
     if (who != 0xEA) {
         LOG_WRN("Unexpected WHO_AM_I 0x%02X. Attempting reset anyway...", who);
     }
 
     /* --- Reset and wake (bank 0) --- */
-    LOG_INF("Resetting ICM20948...");
+    LOG_DBG("Resetting ICM20948...");
     err = icm_write_reg(0x06, 0x41);   /* PWR_MGMT_1: reset + CLKSEL=1 */
     if (err) {
         LOG_ERR("PWR_MGMT_1 reset err %d", err);
@@ -241,7 +240,7 @@ void icm20948_task(void *p1, void *p2, void *p3)
     ARG_UNUSED(p2);
     ARG_UNUSED(p3);
 
-    LOG_INF("ICM20948 thread starting!");
+    LOG_DBG("ICM20948 thread starting");
 
     struct icm20948_data dev;
     int err = icm20948_init(&dev);
