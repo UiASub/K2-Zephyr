@@ -17,8 +17,7 @@
 #include "control.h"
 #include "icm20948.h"
 
-// Declare this module for logging purposes
-LOG_MODULE_DECLARE(k2_app);
+LOG_MODULE_REGISTER(net_app, LOG_LEVEL_WRN);
 
 // Network configuration constants
 #define UDP_PORT 12345          // Port number for UDP server to listen on
@@ -105,7 +104,7 @@ static void net_mgmt_event_handler(struct net_mgmt_event_callback *cb,
 {
     // Check if network interface came up
     if (mgmt_event == NET_EVENT_IF_UP) {
-        LOG_INF("Network interface is up - network is ready");
+        LOG_DBG("Network interface up");
         network_ready = true;  // Set flag to indicate network is available
     } 
     // Check if network interface went down
@@ -175,10 +174,7 @@ static int configure_static_ip(struct net_if *iface)
     net_if_ipv4_set_gw(iface, &gateway);
 
     // Log the complete static IP configuration for verification
-    LOG_INF("Static IP configuration:");
-    LOG_INF("  IP: %s", STATIC_IP_ADDR);
-    LOG_INF("  Netmask: %s", STATIC_NETMASK);
-    LOG_INF("  Gateway: %s", STATIC_GATEWAY);
+    LOG_INF("Static IP: %s/%s gw %s", STATIC_IP_ADDR, STATIC_NETMASK, STATIC_GATEWAY);
 
     return 0;  // Configuration successful
 }
@@ -192,7 +188,7 @@ void network_init(void)
     struct net_if *iface;  // Network interface handle
     int ret;
 
-    LOG_INF("Initializing network with static IP...");
+    LOG_DBG("Initializing network...");
 
     // Get the default network interface
     iface = net_if_get_default();
@@ -221,7 +217,7 @@ void network_init(void)
     k_sleep(K_MSEC(200));
     network_ready = true;  // Mark network as ready for use
     
-    LOG_INF("Static IP configuration complete");
+    LOG_DBG("Static IP configuration complete");
 }
 
 /**
@@ -372,7 +368,7 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
     zsock_inet_pton(AF_INET, TOPSIDE_IP, &dest_addr.sin_addr);
 
 
-    LOG_INF("Sensor UDP sender started (Target: 192.168.1.2:%d)", SENSOR_PORT);
+    LOG_DBG("Sensor UDP sender started (port %d)", SENSOR_PORT);
 
     while (1) {
         icm20948_get_latest(acc, gyro);
@@ -414,7 +410,7 @@ void udp_server_start(void)
                                K_NO_WAIT);
     
     if (thread_id != NULL) {
-        LOG_INF("UDP server thread created successfully");
+        LOG_DBG("UDP server thread created");
     } else {
         LOG_ERR("Failed to create UDP server thread");
     }

@@ -1,7 +1,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_DECLARE(k2_app);
+LOG_MODULE_REGISTER(k2_led, LOG_LEVEL_INF);
 
 const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
 
