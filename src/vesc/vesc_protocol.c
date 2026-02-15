@@ -1,7 +1,7 @@
 #include "vesc_protocol.h"
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(vesc_proto, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(vesc_proto, LOG_LEVEL_INF);
 
 /* Packet markers */
 #define VESC_START_BYTE  0x02

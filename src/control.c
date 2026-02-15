@@ -37,9 +37,7 @@ void rov_6dof_control(int8_t surge, int8_t sway, int8_t heave,
     LOG_DBG("6DOF S:%+4d W:%+4d H:%+4d R:%+4d P:%+4d Y:%+4d",
             surge, sway, heave, roll, pitch, yaw);
     
-    // TODO: Apply your matrix calculations here
-    // Example: thruster_output = thruster_matrix * [surge, sway, heave, roll, pitch, yaw]
-    /* Calculate thruster outputs from 6DOF inputs */
+    /* Calculate thruster outputs using mixing matrix and send to VESCs */
     thruster_output_t output;
     thruster_calculate_6dof(surge, sway, heave, roll, pitch, yaw, &output);
     
