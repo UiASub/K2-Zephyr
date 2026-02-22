@@ -7,35 +7,39 @@ LOG_MODULE_REGISTER(thruster, LOG_LEVEL_INF);
 /* 
  * Thruster Mixing Matrix (6DOF -> 8 thrusters)
  * 
- * Columns: T1(FR-Top), T2(FL-Top), T3(FR-Bot), T4(FL-Bot), 
- *          T5(BR-Top), T6(BL-Top), T7(BR-Bot), T8(BL-Bot)
+ * Pure geometric contribution only — CW/CCW and wiring corrections
+ * are handled separately in MOTOR_DIRECTION[].
+ * 
+ * Columns indexed by CAN ID:
+ *   [0]TLF  [1]TLB  [2]BLB  [3]BLF  [4]BRF  [5]BRB  [6]TRB  [7]TRF
  * Rows: Surge, Sway, Heave, Roll, Pitch, Yaw
  * 
- * Each row defines how that DOF contributes to each thruster.
  * +1 = positive input increases thrust
  * -1 = positive input decreases thrust
  */
 static const float THRUSTER_MATRIX[6][8] = {
-    {  1,  1,  1,  1, -1, -1, -1, -1 },  // Surge: front thrusters forward, back thrusters reverse
-    {  1, -1,  1, -1,  1, -1,  1, -1 },  // Sway: right side positive, left side negative
-    { -1, -1,  1,  1, -1, -1,  1,  1 },  // Heave: bottom thrusters positive, top negative
-    { -1,  1,  1, -1, -1,  1,  1, -1 },  // Roll: left up, right down
-    {  1,  1, -1, -1, -1, -1,  1,  1 },  // Pitch: front up, back down
-    { -1,  1, -1,  1,  1, -1,  1, -1 }   // Yaw: diagonal pairs for rotation
+    /*          TLF  TLB  BLB  BLF  BRF  BRB  TRB  TRF */
+    /*Surge*/ {  1,  -1,  -1,   1,   1,  -1,  -1,   1 },
+    /*Sway */ { -1,  -1,  -1,  -1,   1,   1,   1,   1 },
+    /*Heave*/ { -1,  -1,   1,   1,   1,   1,  -1,  -1 },
+    /*Roll */ {  1,   1,  -1,  -1,   1,   1,  -1,  -1 },
+    /*Pitch*/ {  1,  -1,   1,  -1,  -1,   1,  -1,   1 },
+    /*Yaw  */ {  1,  -1,  -1,   1,  -1,   1,   1,  -1 },
 };
 
 /*
- * Motor direction correction: accounts for physical mounting orientation.
- * +1 = motor mounted so positive duty = forward thrust
- * -1 = motor mounted reversed (flip sign)
+ * Motor direction correction: accounts for prop rotation (CW/CCW)
+ * and any wiring/soldering issues.
  * 
- * TODO: Set these based on your actual motor mounting directions.
- *       Test each motor individually and flip the sign if it spins the wrong way.
- *       Index: 0=FR-Top, 1=FL-Top, 2=FR-Bot, 3=FL-Bot,
- *              4=BR-Top, 5=BL-Top, 6=BR-Bot, 7=BL-Bot
+ * CW  prop → +1  (positive duty = intended thrust direction)
+ * CCW prop → -1  (positive duty = opposite, needs sign flip)
+ * 
+ * Index: 0=TLF(CCW), 1=TLB(CW), 2=BLB(CCW), 3=BLF(CW),
+ *        4=BRF(CCW, reversed soldering: -1*-1=+1),
+ *        5=BRB(CW), 6=TRB(CCW), 7=TRF(CW)
  */
 static const float MOTOR_DIRECTION[8] = {
-    +1, +1, +1, +1, +1, +1, +1, +1
+    -1, +1, -1, +1, +1, +1, -1, +1
 };
 
 /* Maximum duty cycle for safety (50% for testing) */
@@ -93,7 +97,7 @@ void thruster_calculate_6dof(int8_t surge, int8_t sway, int8_t heave,
         for (int i = 0; i < 8; i++) {
             t_pct[i] = (int)(output->thruster[i] * 100);
         }
-        LOG_INF("T[FR-t:%+3d FL-t:%+3d FR-b:%+3d FL-b:%+3d BR-t:%+3d BL-t:%+3d BR-b:%+3d BL-b:%+3d]%%",
+        LOG_INF("T[TLF:%+3d TLB:%+3d BLB:%+3d BLF:%+3d BRF:%+3d BRB:%+3d TRB:%+3d TRF:%+3d]%%",
                 t_pct[0], t_pct[1], t_pct[2], t_pct[3], 
                 t_pct[4], t_pct[5], t_pct[6], t_pct[7]);
     }
@@ -101,15 +105,15 @@ void thruster_calculate_6dof(int8_t surge, int8_t sway, int8_t heave,
 
 void thruster_send_outputs(const thruster_output_t *output)
 {
-    /* Thruster 0 (FR-Top) is connected directly via UART */
-    vesc_set_duty_local(output->thruster[0]);
+    /* TLF (CAN 0) is connected directly via UART */
+    vesc_set_duty_local(output->thruster[THRUSTER_TLF]);
     
-    /* Thrusters 1-7 are connected via CAN bus */
-    vesc_set_duty_can(THRUSTER_FR_TOP,     output->thruster[1]);  // FL-Top
-    vesc_set_duty_can(THRUSTER_BL_TOP,     output->thruster[2]);  // FR-Bottom
-    vesc_set_duty_can(THRUSTER_BR_TOP,     output->thruster[3]);  // FL-Bottom
-    vesc_set_duty_can(THRUSTER_FL_BOTTOM,  output->thruster[4]);  // BR-Top
-    vesc_set_duty_can(THRUSTER_FR_BOTTOM,  output->thruster[5]);  // BL-Top
-    vesc_set_duty_can(THRUSTER_BL_BOTTOM,  output->thruster[6]);  // BR-Bottom
-    vesc_set_duty_can(THRUSTER_BR_BOTTOM,  output->thruster[7]);  // BL-Bottom
+    /* Remaining 7 thrusters via CAN bus */
+    vesc_set_duty_can(THRUSTER_TLB, output->thruster[THRUSTER_TLB]);
+    vesc_set_duty_can(THRUSTER_BLB, output->thruster[THRUSTER_BLB]);
+    vesc_set_duty_can(THRUSTER_BLF, output->thruster[THRUSTER_BLF]);
+    vesc_set_duty_can(THRUSTER_BRF, output->thruster[THRUSTER_BRF]);
+    vesc_set_duty_can(THRUSTER_BRB, output->thruster[THRUSTER_BRB]);
+    vesc_set_duty_can(THRUSTER_TRB, output->thruster[THRUSTER_TRB]);
+    vesc_set_duty_can(THRUSTER_TRF, output->thruster[THRUSTER_TRF]);
 }

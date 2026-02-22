@@ -2,15 +2,16 @@
 
 #include <stdint.h>
 
-/* CAN IDs for your 8 thrusters */
-#define THRUSTER_FL_TOP     0   // Front-Left Top (UART local)
-#define THRUSTER_FR_TOP     1   // Front-Right Top (CAN)
-#define THRUSTER_BL_TOP     2 // Back-Left Top (CAN)
-#define THRUSTER_BR_TOP     3 // Back-Right Top (CAN)
-#define THRUSTER_FL_BOTTOM  4 // Front-Left Bottom (CAN)
-#define THRUSTER_FR_BOTTOM  5 // Front-Right Bottom (CAN)
-#define THRUSTER_BL_BOTTOM  6 // Back-Left Bottom (CAN)
-#define THRUSTER_BR_BOTTOM  7 // Back-Right Bottom (CAN)
+/* CAN IDs for your 8 thrusters
+ * T/B = Top/Bottom, L/R = Left/Right, F/B = Front/Back */
+#define THRUSTER_TLF  0   // Top-Left-Front (UART local) CCW
+#define THRUSTER_TLB  1   // Top-Left-Back (CAN) CW
+#define THRUSTER_BLB  2   // Bottom-Left-Back (CAN) CCW
+#define THRUSTER_BLF  3   // Bottom-Left-Front (CAN) CW
+#define THRUSTER_BRF  4   // Bottom-Right-Front (CAN) CCW (reversed soldering)
+#define THRUSTER_BRB  5   // Bottom-Right-Back (CAN) CW
+#define THRUSTER_TRB  6   // Top-Right-Back (CAN) CCW
+#define THRUSTER_TRF  7   // Top-Right-Front (CAN) CW
 
 /* Thruster output structure */
 typedef struct {
