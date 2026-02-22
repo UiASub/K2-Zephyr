@@ -74,13 +74,32 @@ void thruster_calculate_6dof(int8_t surge, int8_t sway, int8_t heave,
     };
     
     /* Matrix multiplication: thruster[i] = sum(matrix[axis][i] * input[axis]) */
+    float raw[8];
     for (int i = 0; i < 8; i++) {
         float sum = 0.0f;
         for (int axis = 0; axis < 6; axis++) {
             sum += THRUSTER_MATRIX[axis][i] * inputs[axis];
         }
-        /* Apply motor direction correction, then scale and clamp */
-        output->thruster[i] = clamp_f(MOTOR_DIRECTION[i] * sum * MAX_DUTY, -MAX_DUTY, MAX_DUTY);
+        raw[i] = sum;
+    }
+
+    /* Normalize: if any thruster exceeds ±1.0, scale all proportionally.
+     * This preserves the ratio between DOFs instead of hard-clamping. */
+    float max_raw = 0.0f;
+    for (int i = 0; i < 8; i++) {
+        float abs_val = raw[i] > 0 ? raw[i] : -raw[i];
+        if (abs_val > max_raw) max_raw = abs_val;
+    }
+    if (max_raw > 1.0f) {
+        float scale = 1.0f / max_raw;
+        for (int i = 0; i < 8; i++) {
+            raw[i] *= scale;
+        }
+    }
+
+    /* Apply motor direction correction and MAX_DUTY scaling */
+    for (int i = 0; i < 8; i++) {
+        output->thruster[i] = MOTOR_DIRECTION[i] * raw[i] * MAX_DUTY;
     }
 
     /* Find max for logging */
@@ -105,6 +124,8 @@ void thruster_calculate_6dof(int8_t surge, int8_t sway, int8_t heave,
 
 void thruster_send_outputs(const thruster_output_t *output)
 {
+
+
     /* TLF (CAN 0) is connected directly via UART */
     vesc_set_duty_local(output->thruster[THRUSTER_TLF]);
     
