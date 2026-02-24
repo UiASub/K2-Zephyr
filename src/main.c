@@ -17,12 +17,15 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/net/socket.h> // added for zsock_close
+#include <zephyr/drivers/uart.h>
 #include <stdint.h>
 #include "led.h"
 #include "net.h"
 #include "control.h"
 #include "icm20948.h"
 #include "resource_monitor.h"
+#include "vesc/vesc_protocol.h"
+#include "vesc/vesc_uart_zephyr.h"
 
 // Register this source file as a log module named "k2_app" with INFO level
 // This allows us to use LOG_INF(), LOG_ERR(), etc. in our code

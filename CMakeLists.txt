@@ -28,4 +28,7 @@ target_sources(app PRIVATE src/main.c
                            src/net.c
                            src/control.c
                            src/icm20948.c
-                           src/resource_monitor.c)
+                           src/resource_monitor.c
+                           src/vesc/vesc_protocol.c
+                           src/vesc/vesc_uart_zephyr.c
+                           src/vesc/thruster_mapping.c)

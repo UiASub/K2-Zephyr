@@ -28,6 +28,17 @@
     };
 };
 
+/* Enable USART6 for VESC communication
+ * TX = PC6 (D1 on CN10 pin 2)
+ * RX = PC7 (D0 on CN10 pin 1)
+ */
+&usart6 {
+    status = "okay";
+    pinctrl-0 = <&usart6_tx_pc6 &usart6_rx_pc7>;
+    pinctrl-names = "default";
+    current-speed = <115200>;
+};
+
 /* Disable HW SPI1 */
 &spi1 {
     status = "disabled";
