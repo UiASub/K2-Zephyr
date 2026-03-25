@@ -168,7 +168,7 @@ void rov_send_command(uint32_t sequence, uint64_t payload)
     rov_command_t command;
     
     /* Debug: print raw payload bytes */
-    LOG_INF("Raw payload: 0x%08X%08X", (uint32_t)(payload >> 32), (uint32_t)payload);
+    LOG_DBG("Raw payload: 0x%08X%08X", (uint32_t)(payload >> 32), (uint32_t)payload);
     
     command.sequence = sequence;
     command.surge = (int8_t)((payload >> 0) & 0xFF) - 128;
@@ -180,7 +180,7 @@ void rov_send_command(uint32_t sequence, uint64_t payload)
     command.light = (uint8_t)((payload >> 48) & 0xFF);
     command.manipulator = (uint8_t)((payload >> 56) & 0xFF);
     
-    LOG_INF("Parsed: surge=%d sway=%d heave=%d yaw=%d", 
+    LOG_DBG("Parsed: surge=%d sway=%d heave=%d yaw=%d", 
             command.surge, command.sway, command.heave, command.yaw);
     
     if (k_msgq_put(&rov_command_queue, &command, K_NO_WAIT) != 0) {

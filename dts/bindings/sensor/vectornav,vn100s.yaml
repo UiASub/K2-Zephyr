@@ -1,0 +1,14 @@
+description: |
+  VectorNav VN-100S AHRS/IMU attached to an SPI bus.
+
+compatible: "vectornav,vn100s"
+
+include:
+  - sensor-device.yaml
+  - spi-device.yaml
+
+properties:
+  cs-gpios:
+    type: phandle-array
+    required: false
+    description: GPIO specifier for the SPI chip-select line (optional if parent handles CS).

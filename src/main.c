@@ -22,7 +22,7 @@
 #include "led.h"
 #include "net.h"
 #include "control.h"
-#include "icm20948.h"
+#include "vn100s.h"
 #include "resource_monitor.h"
 #include "vesc/vesc_protocol.h"
 #include "vesc/vesc_uart_zephyr.h"
