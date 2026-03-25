@@ -27,6 +27,7 @@
 #include "vesc/vesc_protocol.h"
 #include "vesc/vesc_uart_zephyr.h"
 #include "pid_config.h"
+#include "axis_config.h"
 
 // Register this source file as a log module named "k2_app" with INFO level
 // This allows us to use LOG_INF(), LOG_ERR(), etc. in our code
@@ -73,6 +74,9 @@ int main(void)
 
     // Start PID config listener
     pid_config_start();
+
+    // Start axis config listener
+    axis_config_start();
 
     /*
      * MAIN APPLICATION LOOP

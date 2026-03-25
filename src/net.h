@@ -13,6 +13,7 @@
 #define TELEMETRY_UDP_PORT 12346
 #define SENSOR_PORT        5002
 #define PID_CONFIG_PORT    5003
+#define AXIS_CONFIG_PORT   5004
 
 extern bool network_ready;
 extern int udp_sock;

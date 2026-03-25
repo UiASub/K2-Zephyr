@@ -6,6 +6,7 @@
 #include "led.h"
 #include "pid_controller.h"
 #include "pid_config.h"
+#include "axis_config.h"
 #include "vn100s.h"
 #include "vesc/thruster_mapping.h"
 #include "vesc/vesc_uart_zephyr.h"
@@ -109,11 +110,45 @@ static void sync_pid_gains(void)
 static void stabilise(float out[6])
 {
     /* ---- Read sensors ---- */
-    float yaw_meas, pitch_meas, roll_meas;
-    vn100s_get_ypr(&yaw_meas, &pitch_meas, &roll_meas);
+    float raw_yaw, raw_pitch, raw_roll;
+    vn100s_get_ypr(&raw_yaw, &raw_pitch, &raw_roll);
 
+    /* Apply axis remapping (configured from topside) so PID sees the
+     * correct orientation even if the IMU is mounted non-standard. */
+    float yaw_meas, pitch_meas, roll_meas;
+    axis_config_remap_ypr(raw_yaw, raw_pitch, raw_roll,
+                          &yaw_meas, &pitch_meas, &roll_meas);
+
+    float raw_ax, raw_ay, raw_az;
+    vn100s_get_accel(&raw_ax, &raw_ay, &raw_az);
+
+    /* Apply accelerometer axis remapping */
     float ax, ay, az;
-    vn100s_get_accel(&ax, &ay, &az);
+    axis_config_remap_accel(raw_ax, raw_ay, raw_az, &ax, &ay, &az);
+
+    /* Compensate for centripetal acceleration due to IMU offset from
+     * center of mass.  When the ROV rotates, an off-center IMU sees
+     * centripetal accel a_c = omega^2 * r.  We subtract it so the
+     * PID's speed estimate reflects true translational motion. */
+    imu_offset_t off = axis_config_get_offset();
+    if (off.x != 0.0f || off.y != 0.0f || off.z != 0.0f) {
+        float yr_rad, pr_rad, rr_rad;
+        vn100s_get_rates(&yr_rad, &pr_rad, &rr_rad);
+        /* Convert deg/s to rad/s */
+        const float DEG2RAD = 0.017453293f;
+        yr_rad *= DEG2RAD;
+        pr_rad *= DEG2RAD;
+        rr_rad *= DEG2RAD;
+        /* Offset in metres (stored as mm) */
+        float rx = off.x * 0.001f;
+        float ry = off.y * 0.001f;
+        float rz = off.z * 0.001f;
+        /* Centripetal: a_centripetal = omega x (omega x r)
+         * Simplified per-axis dominant terms: */
+        ax -= (pr_rad * pr_rad + yr_rad * yr_rad) * rx;
+        ay -= (rr_rad * rr_rad + yr_rad * yr_rad) * ry;
+        az -= (rr_rad * rr_rad + pr_rad * pr_rad) * rz;
+    }
 
     float depth_meas = depth_sensor_read();
 
