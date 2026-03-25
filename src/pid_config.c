@@ -189,13 +189,16 @@ static void pid_config_thread(void *arg1, void *arg2, void *arg3)
             memcpy(current_gains, packet.axes, sizeof(current_gains));
             k_mutex_unlock(&pid_gains_mutex);
 
-            /* Log each axis so we can see what changed */
+            /* Log each axis (gains x1000 for readability without %f) */
             for (int i = 0; i < PID_AXIS_COUNT; i++) {
-                LOG_INF("PID %-5s  P=%.4f  I=%.4f  D=%.4f",
+                LOG_INF("PID %-5s  P=%d.%03d  I=%d.%03d  D=%d.%03d",
                         axis_names[i],
-                        (double)packet.axes[i].kp,
-                        (double)packet.axes[i].ki,
-                        (double)packet.axes[i].kd);
+                        (int)packet.axes[i].kp,
+                        (int)(packet.axes[i].kp * 1000) % 1000,
+                        (int)packet.axes[i].ki,
+                        (int)(packet.axes[i].ki * 1000) % 1000,
+                        (int)packet.axes[i].kd,
+                        (int)(packet.axes[i].kd * 1000) % 1000);
             }
 
             send_gains_reply(sock, &client_addr);

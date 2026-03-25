@@ -20,17 +20,11 @@ typedef struct {
 
 /**
  * @brief Calculate thruster outputs from 6DOF inputs
- * @param surge Forward/backward (-128 to +127)
- * @param sway Left/right (-128 to +127)
- * @param heave Up/down (-128 to +127)
- * @param roll Roll rotation (-128 to +127)
- * @param pitch Pitch rotation (-128 to +127)
- * @param yaw Yaw rotation (-128 to +127)
+ * @param inputs Array of 6 floats in range -1.0 to +1.0
+ *               [surge, sway, heave, roll, pitch, yaw]
  * @param output Pointer to thruster output structure
  */
-void thruster_calculate_6dof(int8_t surge, int8_t sway, int8_t heave,
-                             int8_t roll, int8_t pitch, int8_t yaw,
-                             thruster_output_t *output);
+void thruster_calculate_6dof(const float inputs[6], thruster_output_t *output);
 
 /**
  * @brief Send thruster outputs to all VESCs

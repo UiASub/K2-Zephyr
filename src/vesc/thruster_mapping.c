@@ -45,34 +45,8 @@ static const float MOTOR_DIRECTION[8] = {
 /* Maximum duty cycle for safety (50% for testing) */
 #define MAX_DUTY 0.5f
 
-/* Normalize int8_t (-128 to +127) to float (-1.0 to +1.0) */
-static inline float normalize(int8_t value)
+void thruster_calculate_6dof(const float inputs[6], thruster_output_t *output)
 {
-    return (float)value / 127.0f;
-}
-
-/* Clamp float value to range */
-static inline float clamp_f(float value, float min_val, float max_val)
-{
-    if (value < min_val) return min_val;
-    if (value > max_val) return max_val;
-    return value;
-}
-
-void thruster_calculate_6dof(int8_t surge, int8_t sway, int8_t heave,
-                             int8_t roll, int8_t pitch, int8_t yaw,
-                             thruster_output_t *output)
-{
-    /* Normalize inputs to -1.0 to +1.0 range */
-    float inputs[6] = {
-        normalize(surge),
-        normalize(sway),
-        normalize(heave),
-        normalize(roll),
-        normalize(pitch),
-        normalize(yaw)
-    };
-    
     /* Matrix multiplication: thruster[i] = sum(matrix[axis][i] * input[axis]) */
     float raw[8];
     for (int i = 0; i < 8; i++) {
