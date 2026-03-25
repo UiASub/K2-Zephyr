@@ -350,6 +350,7 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
     char buffer[256];
     float yaw, pitch, roll;
     float yr, pr, rr;
+    float ax, ay, az;
 
     while (!network_ready) {
         k_sleep(K_MSEC(100));
@@ -373,12 +374,15 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
     while (1) {
         vn100s_get_ypr(&yaw, &pitch, &roll);
         vn100s_get_rates(&yr, &pr, &rr);
+        vn100s_get_accel(&ax, &ay, &az);
 
         int len = snprintf(buffer, sizeof(buffer),
             "{\"imu\":{\"yaw\":%.2f,\"pitch\":%.2f,\"roll\":%.2f,"
-            "\"yr\":%.2f,\"pr\":%.2f,\"rr\":%.2f}}",
+            "\"yr\":%.2f,\"pr\":%.2f,\"rr\":%.2f,"
+            "\"ax\":%.3f,\"ay\":%.3f,\"az\":%.3f}}",
             (double)yaw, (double)pitch, (double)roll,
-            (double)yr, (double)pr, (double)rr);
+            (double)yr, (double)pr, (double)rr,
+            (double)ax, (double)ay, (double)az);
 
         if (len > 0) {
             zsock_sendto(sock, buffer, len, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));

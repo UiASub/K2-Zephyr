@@ -17,6 +17,9 @@ void vn100s_get_ypr(float *yaw, float *pitch, float *roll);
 /* Get latest angular rates (deg/s) */
 void vn100s_get_rates(float *yaw_rate, float *pitch_rate, float *roll_rate);
 
+/* Get latest linear acceleration (m/s^2) */
+void vn100s_get_accel(float *ax, float *ay, float *az);
+
 /* Thread entry for the IMU task */
 void vn100s_task(void *p1, void *p2, void *p3);
 

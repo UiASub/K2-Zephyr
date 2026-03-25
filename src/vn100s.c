@@ -24,8 +24,8 @@ static const struct spi_dt_spec vn_spi = SPI_DT_SPEC_GET(
 #define VN_CMD_READ  0x01
 
 /* Register IDs */
-#define VN_REG_MODEL    1    /* Model string (24 bytes ASCII) */
-#define VN_REG_YPR_RATE 239  /* YPR + angular rates (6x float32 = 24 bytes) */
+#define VN_REG_MODEL       1    /* Model string (24 bytes ASCII) */
+#define VN_REG_YPR_RATE_AC 240  /* YPR + rates + accel (9x float32 = 36 bytes) */
 
 /*
  * VN-100S SPI transaction:
@@ -119,19 +119,23 @@ int vn100s_init(struct vn100s_data *dev)
 }
 
 /*
- * Register 239 payload (24 bytes, little-endian floats):
+ * Register 240 payload (36 bytes, little-endian floats):
  *   [0..3]   yaw   (deg)
  *   [4..7]   pitch (deg)
  *   [8..11]  roll  (deg)
  *   [12..15] yaw rate   (deg/s)
  *   [16..19] pitch rate (deg/s)
  *   [20..23] roll rate  (deg/s)
+ *   [24..27] accel X    (m/s^2)
+ *   [28..31] accel Y    (m/s^2)
+ *   [32..35] accel Z    (m/s^2)
  */
-static int vn100s_read_ypr_rates(float *yaw, float *pitch, float *roll,
-                                  float *yr, float *pr, float *rr)
+static int vn100s_read_all(float *yaw, float *pitch, float *roll,
+                            float *yr, float *pr, float *rr,
+                            float *ax, float *ay, float *az)
 {
-    uint8_t raw[24]; /* 6x float32 */
-    int err = vn_spi_read_reg(VN_REG_YPR_RATE, raw, sizeof(raw));
+    uint8_t raw[36]; /* 9x float32 */
+    int err = vn_spi_read_reg(VN_REG_YPR_RATE_AC, raw, sizeof(raw));
     if (err) {
         return err;
     }
@@ -142,12 +146,16 @@ static int vn100s_read_ypr_rates(float *yaw, float *pitch, float *roll,
     memcpy(yr,    &raw[12], sizeof(float));
     memcpy(pr,    &raw[16], sizeof(float));
     memcpy(rr,    &raw[20], sizeof(float));
+    memcpy(ax,    &raw[24], sizeof(float));
+    memcpy(ay,    &raw[28], sizeof(float));
+    memcpy(az,    &raw[32], sizeof(float));
 
     return 0;
 }
 
 static float last_yaw, last_pitch, last_roll;
 static float last_yr, last_pr, last_rr;
+static float last_ax, last_ay, last_az;
 
 void vn100s_get_ypr(float *yaw, float *pitch, float *roll)
 {
@@ -161,6 +169,13 @@ void vn100s_get_rates(float *yaw_rate, float *pitch_rate, float *roll_rate)
     *yaw_rate   = last_yr;
     *pitch_rate = last_pr;
     *roll_rate  = last_rr;
+}
+
+void vn100s_get_accel(float *ax, float *ay, float *az)
+{
+    *ax = last_ax;
+    *ay = last_ay;
+    *az = last_az;
 }
 
 /* Thread entry */
@@ -181,8 +196,8 @@ void vn100s_task(void *p1, void *p2, void *p3)
     }
 
     while (1) {
-        float yaw, pitch, roll, yr, pr, rr;
-        err = vn100s_read_ypr_rates(&yaw, &pitch, &roll, &yr, &pr, &rr);
+        float yaw, pitch, roll, yr, pr, rr, ax, ay, az;
+        err = vn100s_read_all(&yaw, &pitch, &roll, &yr, &pr, &rr, &ax, &ay, &az);
         if (!err) {
             last_yaw   = yaw;
             last_pitch = pitch;
@@ -190,6 +205,9 @@ void vn100s_task(void *p1, void *p2, void *p3)
             last_yr    = yr;
             last_pr    = pr;
             last_rr    = rr;
+            last_ax    = ax;
+            last_ay    = ay;
+            last_az    = az;
         } else {
             LOG_ERR("VN-100S read err %d", err);
         }
