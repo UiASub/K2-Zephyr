@@ -31,4 +31,5 @@ target_sources(app PRIVATE src/main.c
                            src/resource_monitor.c
                            src/vesc/vesc_protocol.c
                            src/vesc/vesc_uart_zephyr.c
-                           src/vesc/thruster_mapping.c)
+                           src/vesc/thruster_mapping.c
+                           src/pid_config.c)

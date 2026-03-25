@@ -26,6 +26,7 @@
 #include "resource_monitor.h"
 #include "vesc/vesc_protocol.h"
 #include "vesc/vesc_uart_zephyr.h"
+#include "pid_config.h"
 
 // Register this source file as a log module named "k2_app" with INFO level
 // This allows us to use LOG_INF(), LOG_ERR(), etc. in our code
@@ -69,6 +70,9 @@ int main(void)
 
     // Start UDP server thread
     udp_server_start();
+
+    // Start PID config listener
+    pid_config_start();
 
     /*
      * MAIN APPLICATION LOOP
