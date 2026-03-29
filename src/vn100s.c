@@ -25,7 +25,7 @@ static const struct spi_dt_spec vn_spi = SPI_DT_SPEC_GET(
 
 /* Register IDs */
 #define VN_REG_MODEL       1    /* Model string (24 bytes ASCII) */
-#define VN_REG_YPR_RATE_AC 240  /* YPR + rates + accel (9x float32 = 36 bytes) */
+#define VN_REG_YPR_RATE_AC 239  /* YPR + rates + linear accel body (9x float32 = 36 bytes) */
 
 /*
  * VN-100S SPI transaction:
@@ -126,9 +126,9 @@ int vn100s_init(struct vn100s_data *dev)
  *   [12..15] yaw rate   (deg/s)
  *   [16..19] pitch rate (deg/s)
  *   [20..23] roll rate  (deg/s)
- *   [24..27] accel X    (m/s^2)
- *   [28..31] accel Y    (m/s^2)
- *   [32..35] accel Z    (m/s^2)
+ *   [24..27] linear accel X (m/s^2, gravity compensated)
+ *   [28..31] linear accel Y (m/s^2, gravity compensated)
+ *   [32..35] linear accel Z (m/s^2, gravity compensated)
  */
 static int vn100s_read_all(float *yaw, float *pitch, float *roll,
                             float *yr, float *pr, float *rr,
