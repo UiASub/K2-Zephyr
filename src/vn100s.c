@@ -4,6 +4,7 @@
 #include <zephyr/drivers/spi.h>
 #include <zephyr/logging/log.h>
 #include <string.h>
+#include <math.h>
 
 #include "vn100s.h"
 
@@ -119,7 +120,7 @@ int vn100s_init(struct vn100s_data *dev)
 }
 
 /*
- * Register 240 payload (36 bytes, little-endian floats):
+ * Register 239 payload (36 bytes, little-endian floats):
  *   [0..3]   yaw   (deg)
  *   [4..7]   pitch (deg)
  *   [8..11]  roll  (deg)
@@ -151,6 +152,39 @@ static int vn100s_read_all(float *yaw, float *pitch, float *roll,
     memcpy(az,    &raw[32], sizeof(float));
 
     return 0;
+}
+
+/* Sanity limits for SPI data validation */
+#define MAX_ANGLE     180.0f    /* degrees */
+#define MAX_RATE      2000.0f   /* deg/s — VN-100S gyro range is ±2000 */
+#define MAX_ACCEL     50.0f     /* m/s^2 — ~5g, well above any ROV motion */
+
+static bool vn_sane(float yaw, float pitch, float roll,
+                    float yr, float pr, float rr,
+                    float ax, float ay, float az)
+{
+    /* Reject NaN or Inf in any field */
+    if (!isfinite(yaw) || !isfinite(pitch) || !isfinite(roll) ||
+        !isfinite(yr)  || !isfinite(pr)    || !isfinite(rr)   ||
+        !isfinite(ax)  || !isfinite(ay)    || !isfinite(az)) {
+        return false;
+    }
+
+    /* Reject out-of-range values */
+    if (fabsf(yaw) > MAX_ANGLE || fabsf(pitch) > MAX_ANGLE ||
+        fabsf(roll) > MAX_ANGLE) {
+        return false;
+    }
+    if (fabsf(yr) > MAX_RATE || fabsf(pr) > MAX_RATE ||
+        fabsf(rr) > MAX_RATE) {
+        return false;
+    }
+    if (fabsf(ax) > MAX_ACCEL || fabsf(ay) > MAX_ACCEL ||
+        fabsf(az) > MAX_ACCEL) {
+        return false;
+    }
+
+    return true;
 }
 
 static float last_yaw, last_pitch, last_roll;
@@ -199,15 +233,21 @@ void vn100s_task(void *p1, void *p2, void *p3)
         float yaw, pitch, roll, yr, pr, rr, ax, ay, az;
         err = vn100s_read_all(&yaw, &pitch, &roll, &yr, &pr, &rr, &ax, &ay, &az);
         if (!err) {
-            last_yaw   = yaw;
-            last_pitch = pitch;
-            last_roll  = roll;
-            last_yr    = yr;
-            last_pr    = pr;
-            last_rr    = rr;
-            last_ax    = ax;
-            last_ay    = ay;
-            last_az    = az;
+            if (vn_sane(yaw, pitch, roll, yr, pr, rr, ax, ay, az)) {
+                last_yaw   = yaw;
+                last_pitch = pitch;
+                last_roll  = roll;
+                last_yr    = yr;
+                last_pr    = pr;
+                last_rr    = rr;
+                last_ax    = ax;
+                last_ay    = ay;
+                last_az    = az;
+            } else {
+                LOG_WRN("VN-100S: rejected corrupt sample "
+                        "(y=%d p=%d r=%d)",
+                        (int)yaw, (int)pitch, (int)roll);
+            }
         } else {
             LOG_ERR("VN-100S read err %d", err);
         }
