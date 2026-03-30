@@ -18,17 +18,6 @@ LOG_MODULE_REGISTER(thruster, LOG_LEVEL_INF);
  * -1 = positive input decreases thrust
  */
 
- /*
-static const float THRUSTER_MATRIX[6][8] = {
-    /*          TLF  TLB  BLB  BLF  BRF  BRB  TRB  TRF */
-    /*Surge {  1,  -1,  -1,   1,   1,  -1,  -1,   1 },
-    /*Sway  { -1,  -1,  -1,  -1,   1,   1,   1,   1 },
-    /*Heave { -1,  -1,   1,   1,   1,   1,  -1,  -1 },
-    /*Roll  {  1,   1,  -1,  -1,   1,   1,  -1,  -1 },
-    /*Pitch {  1,  -1,   1,  -1,  -1,   1,  -1,   1 },
-    /*Yaw   {  1,  -1,  -1,   1,  -1,   1,   1,  -1 },
-}; */
-
 static const float THRUSTER_MATRIX[6][8] = {
     /*           TLF   TLB   BLB   BLF   BRF   BRB   TRB   TRF */
     /*Surge */ { -1,   1,    1,   -1,   -1,    1,    1,   -1 },
