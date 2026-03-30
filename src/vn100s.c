@@ -154,8 +154,11 @@ static int vn100s_read_all(float *yaw, float *pitch, float *roll,
     return 0;
 }
 
-/* Sanity limits for SPI data validation */
-#define MAX_ANGLE     180.0f    /* degrees */
+/* Sanity limits for SPI data validation
+ * VN-100S ranges: yaw 0..360, pitch ±90, roll ±180 */
+#define MAX_YAW       360.0f    /* degrees */
+#define MAX_PITCH      90.0f    /* degrees */
+#define MAX_ROLL      180.0f    /* degrees */
 #define MAX_RATE      2000.0f   /* deg/s — VN-100S gyro range is ±2000 */
 #define MAX_ACCEL     50.0f     /* m/s^2 — ~5g, well above any ROV motion */
 
@@ -171,8 +174,8 @@ static bool vn_sane(float yaw, float pitch, float roll,
     }
 
     /* Reject out-of-range values */
-    if (fabsf(yaw) > MAX_ANGLE || fabsf(pitch) > MAX_ANGLE ||
-        fabsf(roll) > MAX_ANGLE) {
+    if (yaw < 0.0f || yaw > MAX_YAW ||
+        fabsf(pitch) > MAX_PITCH || fabsf(roll) > MAX_ROLL) {
         return false;
     }
     if (fabsf(yr) > MAX_RATE || fabsf(pr) > MAX_RATE ||

@@ -188,15 +188,16 @@ static void stabilise(float out[6])
         out[3] = pid_compute(&pid[PID_ROLL], sp, roll_meas, CONTROL_DT);
     }
 
-    /* Pitch */
+    /* Pitch — negate measurement: IMU positive = nose up, thruster positive = nose down */
     if (pid_is_disabled(&pid[PID_PITCH])) {
         out[4] = stick_normalize(p_pitch);
-        angle_setpoint[1] = pitch_meas;
+        angle_setpoint[1] = -pitch_meas;
         pid_reset(&pid[PID_PITCH]);
     } else {
         angle_setpoint[1] += stick_normalize(p_pitch) * MAX_RATE_DPS * CONTROL_DT;
-        float sp = pitch_meas + wrap_180(angle_setpoint[1] - pitch_meas);
-        out[4] = pid_compute(&pid[PID_PITCH], sp, pitch_meas, CONTROL_DT);
+        float meas = -pitch_meas;
+        float sp = meas + wrap_180(angle_setpoint[1] - meas);
+        out[4] = pid_compute(&pid[PID_PITCH], sp, meas, CONTROL_DT);
     }
 
     /* Yaw */
@@ -252,13 +253,14 @@ static void stabilise(float out[6])
      *  Bypass if gains == 0: passthrough raw stick
      * ================================================================ */
 
+    /* Heave — negate measurement: positive depth = deeper, thruster positive = up */
     if (pid_is_disabled(&pid[PID_HEAVE])) {
         out[2] = stick_normalize(p_heave);
-        depth_setpoint = depth_meas;
+        depth_setpoint = -depth_meas;
         pid_reset(&pid[PID_HEAVE]);
     } else {
         depth_setpoint += stick_normalize(p_heave) * MAX_DEPTH_RATE_MPS * CONTROL_DT;
-        out[2] = pid_compute(&pid[PID_HEAVE], depth_setpoint, depth_meas, CONTROL_DT);
+        out[2] = pid_compute(&pid[PID_HEAVE], depth_setpoint, -depth_meas, CONTROL_DT);
     }
 }
 
