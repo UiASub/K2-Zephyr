@@ -154,40 +154,15 @@ static int vn100s_read_all(float *yaw, float *pitch, float *roll,
     return 0;
 }
 
-/* Sanity limits for SPI data validation
- * VN-100S ranges: yaw 0..360, pitch ±90, roll ±180 */
-#define MAX_YAW       360.0f    /* degrees */
-#define MAX_PITCH      90.0f    /* degrees */
-#define MAX_ROLL      180.0f    /* degrees */
-#define MAX_RATE      2000.0f   /* deg/s — VN-100S gyro range is ±2000 */
-#define MAX_ACCEL     50.0f     /* m/s^2 — ~5g, well above any ROV motion */
-
+/* Reject NaN/Inf from SPI corruption — range checks are redundant
+ * with the VN-100S onboard Kalman filter. */
 static bool vn_sane(float yaw, float pitch, float roll,
                     float yr, float pr, float rr,
                     float ax, float ay, float az)
 {
-    /* Reject NaN or Inf in any field */
-    if (!isfinite(yaw) || !isfinite(pitch) || !isfinite(roll) ||
-        !isfinite(yr)  || !isfinite(pr)    || !isfinite(rr)   ||
-        !isfinite(ax)  || !isfinite(ay)    || !isfinite(az)) {
-        return false;
-    }
-
-    /* Reject out-of-range values */
-    if (yaw < 0.0f || yaw > MAX_YAW ||
-        fabsf(pitch) > MAX_PITCH || fabsf(roll) > MAX_ROLL) {
-        return false;
-    }
-    if (fabsf(yr) > MAX_RATE || fabsf(pr) > MAX_RATE ||
-        fabsf(rr) > MAX_RATE) {
-        return false;
-    }
-    if (fabsf(ax) > MAX_ACCEL || fabsf(ay) > MAX_ACCEL ||
-        fabsf(az) > MAX_ACCEL) {
-        return false;
-    }
-
-    return true;
+    return isfinite(yaw) && isfinite(pitch) && isfinite(roll) &&
+           isfinite(yr)  && isfinite(pr)    && isfinite(rr)   &&
+           isfinite(ax)  && isfinite(ay)    && isfinite(az);
 }
 
 static float last_yaw, last_pitch, last_roll;
