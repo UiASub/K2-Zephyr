@@ -1,4 +1,4 @@
-name: Build & Release (Zephyr 4.2 – NUCLEO-F767ZI – Optimized)
+name: Build & Release (Zephyr 4.2 – Optimized)
 
 # Action evnts: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#running-your-workflow-only-when-a-push-of-specific-tags-occurs
 # Tag syntax: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#example-including-branches-and-tags
@@ -13,6 +13,12 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        board:
+          - nucleo_h755zi_q/stm32h755xx/m7
+          - nucleo_f767zi
 
     outputs:
       tag: ${{ steps.version.outputs.tag }}
@@ -106,10 +112,10 @@ jobs:
       ###########################################################################
       # BUILD
       ###########################################################################
-      - name: Build firmware (nucleo_f767zi)
+      - name: Build firmware (${{ matrix.board }})
         run: |
           cd /tmp/ws
-          west build -b nucleo_f767zi app
+          west build -b ${{ matrix.board }} app
 
       ###########################################################################
       # CLEANUP BEFORE UPLOADING (free space again)
@@ -121,10 +127,17 @@ jobs:
 
           df -h
 
+      - name: Derive short board name
+        id: board
+        run: |
+          # Turn "nucleo_h755zi_q/stm32h755xx/m7" into "nucleo_h755zi_q"
+          SHORT=$(echo "${{ matrix.board }}" | cut -d/ -f1)
+          echo "short=$SHORT" >> $GITHUB_OUTPUT
+
       - name: Upload build output
         uses: actions/upload-artifact@v4
         with:
-          name: firmware
+          name: firmware-${{ steps.board.outputs.short }}
           path: |
             /tmp/ws/build/zephyr/*.bin
             /tmp/ws/build/zephyr/*.hex
@@ -139,10 +152,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: firmware
+          pattern: firmware-*
+          merge-multiple: true
 
       - name: Create release
         uses: softprops/action-gh-release@v2

@@ -222,7 +222,7 @@ void vn100s_task(void *p1, void *p2, void *p3)
                 last_ay    = ay;
                 last_az    = az;
             } else {
-                LOG_WRN("VN-100S: rejected corrupt sample "
+                LOG_WRN("VN-100S: corrupt sample "
                         "(y=%d p=%d r=%d)",
                         (int)yaw, (int)pitch, (int)roll);
             }

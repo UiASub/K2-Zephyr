@@ -21,7 +21,7 @@ LOG_MODULE_REGISTER(rov_control, LOG_LEVEL_INF);
 #define MAX_DEPTH_RATE_MPS  0.5f     /* max depth rate from joystick (m/s) */
 #define PID_OUTPUT_LIMIT    1.0f     /* PID output range ±1.0 (maps to ±50% via mixing) */
 #define SPEED_DECAY         0.995f   /* leaky integrator factor for accel→speed */
-#define LOG_INTERVAL        25       /* log every 25 iterations = 500 ms */
+#define LOG_INTERVAL        50       /* log every 50 iterations = 1 s */
 
 /* ---------------------------------------------------------------------------
  * Thread / queue
@@ -312,13 +312,21 @@ static void rov_control_thread(void *arg1, void *arg2, void *arg3)
 
         /* --- Comms timeout check --- */
         int64_t now = k_uptime_get();
+        static bool timed_out;
         if ((now - last_cmd_time) > COMMS_TIMEOUT_MS) {
-            /* Kill all thrusters */
             static const float zeros[6] = {0};
             thruster_output_t output;
             thruster_calculate_6dof(zeros, &output);
             thruster_send_outputs(&output);
+            if (!timed_out) {
+                timed_out = true;
+                LOG_WRN("Comms timeout — thrusters killed");
+            }
         } else {
+            if (timed_out) {
+                timed_out = false;
+                LOG_INF("Comms restored");
+            }
             /* --- Run stabilisation and send to thrusters --- */
             float dof_out[6];
             stabilise(dof_out);
@@ -404,7 +412,7 @@ void rov_control_start(void)
                                   NULL, NULL, NULL,
                                   K_PRIO_COOP(8), 0, K_NO_WAIT);
     if (tid) {
-        LOG_INF("ROV control thread started");
+        LOG_DBG("ROV control thread created");
     } else {
         LOG_ERR("Failed to start ROV control thread");
     }
@@ -423,6 +431,12 @@ void rov_send_command(uint32_t sequence, uint64_t payload)
     command.yaw         = (int8_t)((payload >> 40) & 0xFF) - 128;
     command.light       = (uint8_t)((payload >> 48) & 0xFF);
     command.manipulator = (uint8_t)((payload >> 56) & 0xFF);
+
+    static bool first_cmd;
+    if (!first_cmd) {
+        first_cmd = true;
+        LOG_INF("First command received from topside (seq #%u)", sequence);
+    }
 
     if (k_msgq_put(&rov_command_queue, &command, K_NO_WAIT) != 0) {
         LOG_WRN("ROV command queue full! Command #%u dropped", sequence);

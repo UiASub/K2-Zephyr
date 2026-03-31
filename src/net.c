@@ -17,7 +17,7 @@
 #include "imu/vn100s.h"
 #include "resource_monitor.h"
 
-LOG_MODULE_REGISTER(net_app, LOG_LEVEL_WRN);
+LOG_MODULE_REGISTER(net_app, LOG_LEVEL_INF);
 
 #define RECV_BUFFER_SIZE 64
 
@@ -98,7 +98,7 @@ static void net_mgmt_event_handler(struct net_mgmt_event_callback *cb,
 {
     // Check if network interface came up
     if (mgmt_event == NET_EVENT_IF_UP) {
-        LOG_DBG("Network interface up");
+        LOG_INF("Network interface up");
         network_ready = true;  // Set flag to indicate network is available
     } 
     // Check if network interface went down
@@ -114,7 +114,7 @@ static void net_mgmt_event_handler(struct net_mgmt_event_callback *cb,
  * @param addr: Output structure to store parsed address
  * @return: 0 on success, negative error code on failure
  */
-static inline int parse_ipv4_addr(const char *str, struct in_addr *addr) // ⚡ Added: inline
+static inline int parse_ipv4_addr(const char *str, struct in_addr *addr)
 {
     unsigned int a, b, c, d;
     
@@ -241,7 +241,7 @@ uint32_t crc32_calc(const void *data, size_t length)
 static inline uint64_t net_to_host_64(uint64_t value)
 {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-    return __builtin_bswap64(value); // ⚡ Hardware instruction vs manual swapping
+    return __builtin_bswap64(value);
 #else
     return value;
 #endif
@@ -259,9 +259,7 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
     struct sockaddr_in bind_addr, client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
     
-    // 🚀 PERFORMANCE: Direct struct receive (eliminates memcpy overhead)
-    udp_packet_t packet; // ⚡ Direct to struct instead of buffer + casting
-    
+    udp_packet_t packet;
     int ret;
 
     while (!network_ready) {
@@ -270,7 +268,7 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
 
     udp_sock = zsock_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (udp_sock < 0) {
-        LOG_ERR("Failed to create UDP socket: %d", udp_sock); // ⚡ Essential: socket creation failure
+        LOG_ERR("Failed to create UDP socket: %d", udp_sock);
         return;
     }
 
@@ -281,57 +279,40 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
 
     ret = zsock_bind(udp_sock, (struct sockaddr *)&bind_addr, sizeof(bind_addr));
     if (ret < 0) {
-        LOG_ERR("Failed to bind UDP socket: %d", ret); // ⚡ Essential: bind failure
+        LOG_ERR("Failed to bind UDP socket: %d", ret);
         zsock_close(udp_sock);
         return;
     }
 
-    LOG_INF("UDP server ready on port %d", UDP_COMMAND_PORT); // ⚡ Essential: startup confirmation
+    LOG_INF("UDP server ready on port %d", UDP_COMMAND_PORT);
 
     while (1) {
-        //PERFORMANCE: Direct struct receive (no buffer copying)
-        ret = zsock_recvfrom(udp_sock, &packet, sizeof(packet), 0, // ⚡ Direct to struct
+        ret = zsock_recvfrom(udp_sock, &packet, sizeof(packet), 0,
                              (struct sockaddr *)&client_addr, &client_addr_len);
 
         if (ret == sizeof(udp_packet_t)) {
-            //TESTING: Print all packet values
             uint32_t recv_sequence = ntohl(packet.sequence);
             uint64_t recv_payload = net_to_host_64(packet.payload);
             uint32_t recv_crc = ntohl(packet.crc32);
             
-            //LOG_INF("=== PACKET RECEIVED ===");
-            //LOG_INF("Sequence: %u", recv_sequence);
-            //LOG_INF("Payload:  0x%016llX", recv_payload);
-            //LOG_INF("CRC32:    0x%08X", recv_crc);
-            
-            // Calculate CRC32 for validation
-            uint32_t calculated_crc = crc32_calc(&packet, 
+            uint32_t calculated_crc = crc32_calc(&packet,
                 sizeof(packet.sequence) + sizeof(packet.payload));
-            
-            //LOG_INF("Calc CRC: 0x%08X", calculated_crc);
-            
-            //TESTING: Clear match/mismatch indication
-            if (calculated_crc == recv_crc) {
-                //LOG_INF("CRC MATCH - Packet is valid!");
-                // Forward command to control system
-                rov_send_command(recv_sequence, recv_payload);
 
-                // Update resource monitor stats
+            if (calculated_crc == recv_crc) {
+                rov_send_command(recv_sequence, recv_payload);
                 resource_monitor_inc_udp_rx();
             } else {
-                LOG_ERR("CRC MISMATCH - Packet corrupted!");
-                LOG_ERR("Expected: 0x%08X, Got: 0x%08X", calculated_crc, recv_crc);
+                LOG_WRN("CRC mismatch: calc 0x%08X, recv 0x%08X",
+                        calculated_crc, recv_crc);
                 resource_monitor_inc_udp_errors();
             }
-            //LOG_INF("========================");
             
         } else if (ret < 0) {
             LOG_ERR("UDP recv error: %d", ret);
             resource_monitor_inc_udp_errors();
             k_sleep(K_MSEC(100));
         } else {
-            //TESTING: Print wrong packet sizes for debugging
-            LOG_WRN("Wrong packet size: got %d bytes, expected %d bytes", 
+            LOG_WRN("Wrong packet size: got %d bytes, expected %d bytes",
                     ret, sizeof(udp_packet_t));
         }
     }
