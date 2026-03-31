@@ -27,4 +27,11 @@ target_sources(app PRIVATE src/main.c
                            src/led.c
                            src/net.c
                            src/control.c
-                           src/icm20948.c)
+                           src/vn100s.c
+                           src/resource_monitor.c
+                           src/vesc/vesc_protocol.c
+                           src/vesc/vesc_uart_zephyr.c
+                           src/vesc/thruster_mapping.c
+                           src/pid_config.c
+                           src/pid_controller.c
+                           src/axis_config.c)

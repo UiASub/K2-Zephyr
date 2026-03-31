@@ -14,14 +14,14 @@
 
 // Include LED control header for visual feedback
 #include "led.h"
+#include "net.h"
 #include "control.h"
-#include "icm20948.h"
+#include "vn100s.h"
+#include "resource_monitor.h"
 
 LOG_MODULE_REGISTER(net_app, LOG_LEVEL_WRN);
 
-// Network configuration constants
-#define UDP_PORT 12345          // Port number for UDP server to listen on
-#define RECV_BUFFER_SIZE 64     // Buffer size for incoming UDP messages
+#define RECV_BUFFER_SIZE 64
 
 // Packet structure definition
 typedef struct {
@@ -30,12 +30,8 @@ typedef struct {
     uint32_t crc32;     // CRC32 checksum
 } __attribute__((packed)) udp_packet_t;
 
-// Static IP configuration - customize these for your network
-#define STATIC_IP_ADDR "192.168.1.100"   // Device's static IP address
-#define STATIC_NETMASK "255.255.255.0"   // Subnet mask
-#define STATIC_GATEWAY "192.168.1.1"     // Default gateway address
-#define TOPSIDE_IP "192.168.1.255"
-#define SENSOR_PORT 5002
+/* Use addresses from net.h */
+#define STATIC_IP_ADDR STATIC_DEVICE_IP
 
 // Network management callback structure for handling interface events
 static struct net_mgmt_event_callback mgmt_cb;
@@ -226,18 +222,17 @@ void network_init(void)
  * @param length: Length of data in bytes
  * @return: Calculated CRC32 value
  */
-static inline uint32_t calculate_crc32(const void *data, size_t length)
+uint32_t crc32_calc(const void *data, size_t length)
 {
     const uint8_t *bytes = (const uint8_t *)data;
     uint32_t crc = 0xFFFFFFFF;
-    
-    // CRC32 polynomial (IEEE 802.3)
+
     for (size_t i = 0; i < length; i++) {
         uint8_t index = (crc ^ bytes[i]) & 0xFF;
         crc = (crc >> 8) ^ crc32_table[index];
     }
-    
-    return ~crc;  // Final inversion
+
+    return ~crc;
 }
 
 /**
@@ -284,7 +279,7 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
     memset(&bind_addr, 0, sizeof(bind_addr));
     bind_addr.sin_family = AF_INET;
     bind_addr.sin_addr.s_addr = INADDR_ANY;
-    bind_addr.sin_port = htons(UDP_PORT);
+    bind_addr.sin_port = htons(UDP_COMMAND_PORT);
 
     ret = zsock_bind(udp_sock, (struct sockaddr *)&bind_addr, sizeof(bind_addr));
     if (ret < 0) {
@@ -293,7 +288,7 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
         return;
     }
 
-    LOG_INF("UDP server ready on port %d", UDP_PORT); // ⚡ Essential: startup confirmation
+    LOG_INF("UDP server ready on port %d", UDP_COMMAND_PORT); // ⚡ Essential: startup confirmation
 
     while (1) {
         //PERFORMANCE: Direct struct receive (no buffer copying)
@@ -312,7 +307,7 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
             //LOG_INF("CRC32:    0x%08X", recv_crc);
             
             // Calculate CRC32 for validation
-            uint32_t calculated_crc = calculate_crc32(&packet, 
+            uint32_t calculated_crc = crc32_calc(&packet, 
                 sizeof(packet.sequence) + sizeof(packet.payload));
             
             //LOG_INF("Calc CRC: 0x%08X", calculated_crc);
@@ -324,14 +319,19 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
 
                 // Forward command to control system
                 rov_send_command(recv_sequence, recv_payload);
+
+                // Update resource monitor stats
+                resource_monitor_inc_udp_rx();
             } else {
                 LOG_ERR("CRC MISMATCH - Packet corrupted!");
                 LOG_ERR("Expected: 0x%08X, Got: 0x%08X", calculated_crc, recv_crc);
+                resource_monitor_inc_udp_errors();
             }
             //LOG_INF("========================");
             
         } else if (ret < 0) {
             LOG_ERR("UDP recv error: %d", ret);
+            resource_monitor_inc_udp_errors();
             k_sleep(K_MSEC(100));
         } else {
             //TESTING: Print wrong packet sizes for debugging
@@ -347,8 +347,10 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
     
     int sock;
     struct sockaddr_in dest_addr;
-    char buffer[128];
-    int16_t acc[3], gyro[3];
+    char buffer[256];
+    float yaw, pitch, roll;
+    float yr, pr, rr;
+    float ax, ay, az;
 
     while (!network_ready) {
         k_sleep(K_MSEC(100));
@@ -367,25 +369,26 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
     zsock_setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
     zsock_inet_pton(AF_INET, TOPSIDE_IP, &dest_addr.sin_addr);
 
-
     LOG_DBG("Sensor UDP sender started (port %d)", SENSOR_PORT);
 
     while (1) {
-        icm20948_get_latest(acc, gyro);
+        vn100s_get_ypr(&yaw, &pitch, &roll);
+        vn100s_get_rates(&yr, &pr, &rr);
+        vn100s_get_accel(&ax, &ay, &az);
 
-        // JSON format matching Topside/routes.py expectation for "9dof"
-        // It expects a dict. Routes.py: get_section("9dof").
-        // DataHandler reads file. So we need a Receiver on PC side to write to file.
-        // Our receiver will expect JSON.
-        int len = snprintf(buffer, sizeof(buffer), 
-            "{\"9dof\":{\"accel\":[%d,%d,%d],\"gyro\":[%d,%d,%d]}}",
-            acc[0], acc[1], acc[2], gyro[0], gyro[1], gyro[2]);
+        int len = snprintf(buffer, sizeof(buffer),
+            "{\"imu\":{\"yaw\":%.2f,\"pitch\":%.2f,\"roll\":%.2f,"
+            "\"yr\":%.2f,\"pr\":%.2f,\"rr\":%.2f,"
+            "\"ax\":%.3f,\"ay\":%.3f,\"az\":%.3f}}",
+            (double)yaw, (double)pitch, (double)roll,
+            (double)yr, (double)pr, (double)rr,
+            (double)ax, (double)ay, (double)az);
 
         if (len > 0) {
             zsock_sendto(sock, buffer, len, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
         }
 
-        k_msleep(50); // 20 Hz
+        k_msleep(200);
     }
 }
 
