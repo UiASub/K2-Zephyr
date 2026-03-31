@@ -19,15 +19,14 @@
 #include <zephyr/net/socket.h> // added for zsock_close
 #include <zephyr/drivers/uart.h>
 #include <stdint.h>
-#include "led.h"
 #include "net.h"
 #include "control.h"
-#include "vn100s.h"
+#include "imu/vn100s.h"
 #include "resource_monitor.h"
 #include "vesc/vesc_protocol.h"
 #include "vesc/vesc_uart_zephyr.h"
-#include "pid_config.h"
-#include "axis_config.h"
+#include "pid/pid_config.h"
+#include "imu/axis_config.h"
 
 // Register this source file as a log module named "k2_app" with INFO level
 // This allows us to use LOG_INF(), LOG_ERR(), etc. in our code
@@ -54,9 +53,6 @@ int main(void)
      * Set up all hardware and software components before main loop
      */
     
-    // Initialize the LED GPIO pin
-    led_init();
-
     // Initialize ROV control system
     rov_control_init();
 

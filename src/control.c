@@ -1,13 +1,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/drivers/gpio.h>
-
 #include "control.h"
-#include "led.h"
-#include "pid_controller.h"
-#include "pid_config.h"
-#include "axis_config.h"
-#include "vn100s.h"
+#include "pid/pid_controller.h"
+#include "pid/pid_config.h"
+#include "imu/axis_config.h"
+#include "imu/vn100s.h"
 #include "vesc/thruster_mapping.h"
 #include "vesc/vesc_uart_zephyr.h"
 
@@ -311,7 +308,6 @@ static void rov_control_thread(void *arg1, void *arg2, void *arg3)
             k_mutex_unlock(&pilot_mutex);
 
             last_cmd_time = k_uptime_get();
-            gpio_pin_toggle_dt(&led);
         }
 
         /* --- Comms timeout check --- */

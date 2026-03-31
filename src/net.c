@@ -12,11 +12,9 @@
 #include <stdlib.h>
 #include <errno.h>
 
-// Include LED control header for visual feedback
-#include "led.h"
 #include "net.h"
 #include "control.h"
-#include "vn100s.h"
+#include "imu/vn100s.h"
 #include "resource_monitor.h"
 
 LOG_MODULE_REGISTER(net_app, LOG_LEVEL_WRN);
@@ -315,8 +313,6 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
             //TESTING: Clear match/mismatch indication
             if (calculated_crc == recv_crc) {
                 //LOG_INF("CRC MATCH - Packet is valid!");
-                //gpio_pin_toggle_dt(&led); // Visual feedback
-
                 // Forward command to control system
                 rov_send_command(recv_sequence, recv_payload);
 
