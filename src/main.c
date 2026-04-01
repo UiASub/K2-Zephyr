@@ -18,14 +18,19 @@
 #include <zephyr/net/socket.h> // added for zsock_close
 #include <zephyr/drivers/uart.h>
 #include <stdint.h>
-#include "net.h"
+#include "net/net.h"
 #include "control.h"
 #include "imu/vn100s.h"
-#include "resource_monitor.h"
+#include "net/resource_monitor.h"
 #include "vesc/vesc_protocol.h"
 #include "vesc/vesc_uart_zephyr.h"
 #include "pid/pid_config.h"
 #include "imu/axis_config.h"
+#include "net/control_telemetry.h"
+#include "net/setpoint_override.h"
+
+/* Defined in net/log_backend_udp.c */
+void log_backend_udp_topside_start(void);
 
 // Register this source file as a log module named "k2_app" with INFO level
 // This allows us to use LOG_INF(), LOG_ERR(), etc. in our code
@@ -58,6 +63,9 @@ int main(void)
     // Initialize networking
     network_init();
 
+    // Activate UDP log backend (must be after network_init)
+    log_backend_udp_topside_start();
+
     // Start ROV control thread
     rov_control_start();
 
@@ -72,6 +80,12 @@ int main(void)
 
     // Start axis config listener
     axis_config_start();
+
+    // Start control telemetry sender
+    control_telemetry_start();
+
+    // Start setpoint override listener
+    setpoint_override_start();
 
     /*
      * MAIN APPLICATION LOOP

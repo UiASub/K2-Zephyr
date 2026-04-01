@@ -1,5 +1,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <string.h>
 #include "control.h"
 #include "pid/pid_controller.h"
 #include "pid/pid_config.h"
@@ -64,6 +65,15 @@ static float est_speed[2];               /* [0]=surge(x) [1]=sway(y) */
 /* Depth setpoint (m, integrated from stick) — sensor stub for now */
 static float depth_setpoint;
 
+/* Control telemetry snapshot — written by control loop, read by sender thread */
+static control_telemetry_t ctrl_telem;
+K_MUTEX_DEFINE(ctrl_telem_mutex);
+
+/* Manual setpoint override from topside (for testing/debugging) */
+static uint8_t override_mask;           /* bitmask: bit 0=surge … bit 5=yaw */
+static float   override_setpoint[6];
+K_MUTEX_DEFINE(override_mutex);
+
 /* ---------------------------------------------------------------------------
  * Helpers
  * --------------------------------------------------------------------------- */
@@ -106,6 +116,10 @@ static void sync_pid_gains(void)
  * --------------------------------------------------------------------------- */
 static void stabilise(float out[6])
 {
+    /* Per-axis snapshots for telemetry (populated alongside each PID call) */
+    float sp_snap[6] = {0};
+    float err_snap[6] = {0};
+
     /* ---- Read sensors ---- */
     float raw_yaw, raw_pitch, raw_roll;
     vn100s_get_ypr(&raw_yaw, &raw_pitch, &raw_roll);
@@ -160,6 +174,14 @@ static void stabilise(float out[6])
     p_yaw   = pilot.yaw;
     k_mutex_unlock(&pilot_mutex);
 
+    /* ---- Grab setpoint override snapshot ---- */
+    uint8_t ovr_mask;
+    float   ovr_sp[6];
+    k_mutex_lock(&override_mutex, K_FOREVER);
+    ovr_mask = override_mask;
+    memcpy(ovr_sp, override_setpoint, sizeof(ovr_sp));
+    k_mutex_unlock(&override_mutex);
+
     /* ---- Sync latest PID gains from topside ---- */
     sync_pid_gains();
 
@@ -172,41 +194,61 @@ static void stabilise(float out[6])
      * ================================================================ */
 
     /* Roll */
-    if (pid_is_disabled(&pid[PID_ROLL])) {
-        out[3] = stick_normalize(p_roll);
-        /* Keep setpoint tracking current angle so switching to PID is bumpless */
-        angle_setpoint[0] = roll_meas;
-        pid_reset(&pid[PID_ROLL]);
-    } else {
-        angle_setpoint[0] += stick_normalize(p_roll) * MAX_RATE_DPS * CONTROL_DT;
-        /* Virtual setpoint near measurement so derivative-on-measurement works,
-         * while wrap_180 gives the correct shortest-path error. */
+    if (ovr_mask & (1 << PID_ROLL)) {
+        angle_setpoint[0] = ovr_sp[PID_ROLL];
         float sp = roll_meas + wrap_180(angle_setpoint[0] - roll_meas);
         out[3] = pid_compute(&pid[PID_ROLL], sp, roll_meas, CONTROL_DT);
+        sp_snap[3] = sp;  err_snap[3] = sp - roll_meas;
+    } else if (pid_is_disabled(&pid[PID_ROLL])) {
+        out[3] = stick_normalize(p_roll);
+        angle_setpoint[0] = roll_meas;
+        pid_reset(&pid[PID_ROLL]);
+        sp_snap[3] = out[3];  err_snap[3] = 0.0f;
+    } else {
+        angle_setpoint[0] += stick_normalize(p_roll) * MAX_RATE_DPS * CONTROL_DT;
+        float sp = roll_meas + wrap_180(angle_setpoint[0] - roll_meas);
+        out[3] = pid_compute(&pid[PID_ROLL], sp, roll_meas, CONTROL_DT);
+        sp_snap[3] = sp;  err_snap[3] = sp - roll_meas;
     }
 
     /* Pitch — negate measurement: IMU positive = nose up, thruster positive = nose down */
-    if (pid_is_disabled(&pid[PID_PITCH])) {
+    if (ovr_mask & (1 << PID_PITCH)) {
+        angle_setpoint[1] = ovr_sp[PID_PITCH];
+        float meas = -pitch_meas;
+        float sp = meas + wrap_180(angle_setpoint[1] - meas);
+        out[4] = pid_compute(&pid[PID_PITCH], sp, meas, CONTROL_DT);
+        sp_snap[4] = sp;  err_snap[4] = sp - meas;
+    } else if (pid_is_disabled(&pid[PID_PITCH])) {
         out[4] = stick_normalize(p_pitch);
         angle_setpoint[1] = -pitch_meas;
         pid_reset(&pid[PID_PITCH]);
+        sp_snap[4] = out[4];  err_snap[4] = 0.0f;
     } else {
         angle_setpoint[1] += stick_normalize(p_pitch) * MAX_RATE_DPS * CONTROL_DT;
         float meas = -pitch_meas;
         float sp = meas + wrap_180(angle_setpoint[1] - meas);
         out[4] = pid_compute(&pid[PID_PITCH], sp, meas, CONTROL_DT);
+        sp_snap[4] = sp;  err_snap[4] = sp - meas;
     }
 
     /* Yaw */
-    if (pid_is_disabled(&pid[PID_YAW])) {
+    if (ovr_mask & (1 << PID_YAW)) {
+        angle_setpoint[2] = ovr_sp[PID_YAW];
+        angle_setpoint[2] = wrap_180(angle_setpoint[2]);
+        float sp = yaw_meas + wrap_180(angle_setpoint[2] - yaw_meas);
+        out[5] = pid_compute(&pid[PID_YAW], sp, yaw_meas, CONTROL_DT);
+        sp_snap[5] = sp;  err_snap[5] = sp - yaw_meas;
+    } else if (pid_is_disabled(&pid[PID_YAW])) {
         out[5] = stick_normalize(p_yaw);
         angle_setpoint[2] = yaw_meas;
         pid_reset(&pid[PID_YAW]);
+        sp_snap[5] = out[5];  err_snap[5] = 0.0f;
     } else {
         angle_setpoint[2] += stick_normalize(p_yaw) * MAX_RATE_DPS * CONTROL_DT;
         angle_setpoint[2] = wrap_180(angle_setpoint[2]);
         float sp = yaw_meas + wrap_180(angle_setpoint[2] - yaw_meas);
         out[5] = pid_compute(&pid[PID_YAW], sp, yaw_meas, CONTROL_DT);
+        sp_snap[5] = sp;  err_snap[5] = sp - yaw_meas;
     }
 
     /* ================================================================
@@ -223,23 +265,35 @@ static void stabilise(float out[6])
     est_speed[1] = est_speed[1] * SPEED_DECAY + ay * CONTROL_DT;
 
     /* Surge */
-    if (pid_is_disabled(&pid[PID_SURGE])) {
+    if (ovr_mask & (1 << PID_SURGE)) {
+        float sp = ovr_sp[PID_SURGE];
+        out[0] = pid_compute(&pid[PID_SURGE], sp, est_speed[0], CONTROL_DT);
+        sp_snap[0] = sp;  err_snap[0] = sp - est_speed[0];
+    } else if (pid_is_disabled(&pid[PID_SURGE])) {
         out[0] = stick_normalize(p_surge);
         est_speed[0] = 0.0f;
         pid_reset(&pid[PID_SURGE]);
+        sp_snap[0] = out[0];  err_snap[0] = 0.0f;
     } else {
         float sp = stick_normalize(p_surge) * MAX_SPEED_MPS;
         out[0] = pid_compute(&pid[PID_SURGE], sp, est_speed[0], CONTROL_DT);
+        sp_snap[0] = sp;  err_snap[0] = sp - est_speed[0];
     }
 
     /* Sway */
-    if (pid_is_disabled(&pid[PID_SWAY])) {
+    if (ovr_mask & (1 << PID_SWAY)) {
+        float sp = ovr_sp[PID_SWAY];
+        out[1] = pid_compute(&pid[PID_SWAY], sp, est_speed[1], CONTROL_DT);
+        sp_snap[1] = sp;  err_snap[1] = sp - est_speed[1];
+    } else if (pid_is_disabled(&pid[PID_SWAY])) {
         out[1] = stick_normalize(p_sway);
         est_speed[1] = 0.0f;
         pid_reset(&pid[PID_SWAY]);
+        sp_snap[1] = out[1];  err_snap[1] = 0.0f;
     } else {
         float sp = stick_normalize(p_sway) * MAX_SPEED_MPS;
         out[1] = pid_compute(&pid[PID_SWAY], sp, est_speed[1], CONTROL_DT);
+        sp_snap[1] = sp;  err_snap[1] = sp - est_speed[1];
     }
 
     /* ================================================================
@@ -251,14 +305,27 @@ static void stabilise(float out[6])
      * ================================================================ */
 
     /* Heave — negate measurement: positive depth = deeper, thruster positive = up */
-    if (pid_is_disabled(&pid[PID_HEAVE])) {
+    if (ovr_mask & (1 << PID_HEAVE)) {
+        depth_setpoint = ovr_sp[PID_HEAVE];
+        out[2] = pid_compute(&pid[PID_HEAVE], depth_setpoint, -depth_meas, CONTROL_DT);
+        sp_snap[2] = depth_setpoint;  err_snap[2] = depth_setpoint - (-depth_meas);
+    } else if (pid_is_disabled(&pid[PID_HEAVE])) {
         out[2] = stick_normalize(p_heave);
         depth_setpoint = -depth_meas;
         pid_reset(&pid[PID_HEAVE]);
+        sp_snap[2] = out[2];  err_snap[2] = 0.0f;
     } else {
         depth_setpoint += stick_normalize(p_heave) * MAX_DEPTH_RATE_MPS * CONTROL_DT;
         out[2] = pid_compute(&pid[PID_HEAVE], depth_setpoint, -depth_meas, CONTROL_DT);
+        sp_snap[2] = depth_setpoint;  err_snap[2] = depth_setpoint - (-depth_meas);
     }
+
+    /* Publish telemetry snapshot */
+    k_mutex_lock(&ctrl_telem_mutex, K_FOREVER);
+    memcpy(ctrl_telem.setpoint, sp_snap, sizeof(sp_snap));
+    memcpy(ctrl_telem.output, out, sizeof(ctrl_telem.output));
+    memcpy(ctrl_telem.error, err_snap, sizeof(err_snap));
+    k_mutex_unlock(&ctrl_telem_mutex);
 }
 
 /* ---------------------------------------------------------------------------
@@ -351,6 +418,19 @@ static void rov_control_thread(void *arg1, void *arg2, void *arg3)
                         (int)(dof_out[2] * 100),
                         (int)(est_speed[0] * 1000),
                         (int)(est_speed[1] * 1000));
+
+                /* Show active override setpoints so topside can verify them */
+                k_mutex_lock(&override_mutex, K_FOREVER);
+                uint8_t log_ovr_mask = override_mask;
+                float   log_ovr_sp[6];
+                memcpy(log_ovr_sp, override_setpoint, sizeof(log_ovr_sp));
+                k_mutex_unlock(&override_mutex);
+                if (log_ovr_mask) {
+                    LOG_INF("OVR mask=0x%02X su:%.2f sw:%.2f hv:%.2f r:%.1f p:%.1f y:%.1f",
+                            log_ovr_mask,
+                            (double)log_ovr_sp[0], (double)log_ovr_sp[1], (double)log_ovr_sp[2],
+                            (double)log_ovr_sp[3], (double)log_ovr_sp[4], (double)log_ovr_sp[5]);
+                }
             }
 
             thruster_output_t output;
@@ -416,6 +496,30 @@ void rov_control_start(void)
     } else {
         LOG_ERR("Failed to start ROV control thread");
     }
+}
+
+void control_get_telemetry(control_telemetry_t *out)
+{
+    k_mutex_lock(&ctrl_telem_mutex, K_FOREVER);
+    *out = ctrl_telem;
+    k_mutex_unlock(&ctrl_telem_mutex);
+}
+
+void control_set_override(uint8_t axis_mask, const float setpoints[6])
+{
+    k_mutex_lock(&override_mutex, K_FOREVER);
+    override_mask = axis_mask;
+    memcpy(override_setpoint, setpoints, sizeof(override_setpoint));
+    k_mutex_unlock(&override_mutex);
+    LOG_DBG("Setpoint override: mask=0x%02X", axis_mask);
+}
+
+void control_clear_override(void)
+{
+    k_mutex_lock(&override_mutex, K_FOREVER);
+    override_mask = 0;
+    k_mutex_unlock(&override_mutex);
+    LOG_INF("Setpoint override cleared");
 }
 
 void rov_send_command(uint32_t sequence, uint64_t payload)

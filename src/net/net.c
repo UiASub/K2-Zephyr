@@ -13,8 +13,8 @@
 #include <errno.h>
 
 #include "net.h"
-#include "control.h"
-#include "imu/vn100s.h"
+#include "../control.h"
+#include "../imu/vn100s.h"
 #include "resource_monitor.h"
 
 LOG_MODULE_REGISTER(net_app, LOG_LEVEL_INF);

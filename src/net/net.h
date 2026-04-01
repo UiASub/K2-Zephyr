@@ -14,6 +14,9 @@
 #define SENSOR_PORT        5002
 #define PID_CONFIG_PORT    5003
 #define AXIS_CONFIG_PORT   5004
+#define CONTROL_TELEM_PORT 5005
+#define LOG_UDP_PORT       5006
+#define SETPOINT_OVR_PORT  5007
 
 extern bool network_ready;
 extern int udp_sock;
