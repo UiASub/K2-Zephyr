@@ -1,6 +1,6 @@
-# NUCLEO-F767ZI + Zephyr
+# NUCLEO-H755ZI-Q + Zephyr
 
-Board docs: <https://docs.zephyrproject.org/4.2.0/boards/st/nucleo_f767zi/doc/index.html>
+Default board docs: <https://docs.zephyrproject.org/4.2.0/boards/st/nucleo_h755zi_q/doc/index.html>
 
 UiASub Setup Guide: <https://wiki.uiasub.no/k2zephyr/>
 
@@ -40,6 +40,24 @@ chmod +x install_zephyr.sh
 ```
 
 use `./install_zephyr.sh -h` to see help
+
+## Building
+
+Default target is H7 (`nucleo_h755zi_q/stm32h755xx/m7`).
+
+```bash
+./build.sh
+./build.sh --h7
+./build.sh --f7
+```
+
+On Windows:
+
+```powershell
+.\build.ps1
+.\build.ps1 --H7
+.\build.ps1 --F7
+```
 
 ## Release
 

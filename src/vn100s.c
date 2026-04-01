@@ -10,7 +10,7 @@
 
 LOG_MODULE_REGISTER(vn100s, LOG_LEVEL_INF);
 
-#define VN_NODE DT_NODELABEL(vn100s)
+#define VN_NODE DT_ALIAS(vn100s)
 
 BUILD_ASSERT(DT_NODE_HAS_STATUS(VN_NODE, okay),
              "VN-100S node not okay in DT");

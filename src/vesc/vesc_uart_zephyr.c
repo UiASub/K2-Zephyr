@@ -6,8 +6,12 @@
 
 LOG_MODULE_REGISTER(vesc_uart, LOG_LEVEL_INF);
 
-/* Get USART6 device for VESC communication */
-static const struct device *vesc_uart = DEVICE_DT_GET(DT_NODELABEL(usart6));
+#define VESC_UART_NODE DT_ALIAS(vesc_uart)
+
+BUILD_ASSERT(DT_NODE_HAS_STATUS_OKAY(VESC_UART_NODE),
+             "vesc_uart alias not okay in DT");
+
+static const struct device *vesc_uart = DEVICE_DT_GET(VESC_UART_NODE);
 
 int vesc_uart_init(void)
 {

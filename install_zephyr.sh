@@ -357,13 +357,13 @@ clone_k2_zephyr() {
     fi
 }
 
-# Configure default board for nucleo_f767zi
+# Configure default board for nucleo_h755zi_q/stm32h755xx/m7
 configure_board() {
-    info "Configuring default board: nucleo_f767zi..."
+    info "Configuring default board: nucleo_h755zi_q/stm32h755xx/m7..."
     pushd "$ZEPHYR_PATH" > /dev/null
-    west config --local build.board nucleo_f767zi
+    west config --local build.board nucleo_h755zi_q/stm32h755xx/m7
     popd > /dev/null
-    log "Board configured: nucleo_f767zi" 1
+    log "Board configured: nucleo_h755zi_q/stm32h755xx/m7" 1
 }
 
 # Build K2-Zephyr project
