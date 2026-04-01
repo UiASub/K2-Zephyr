@@ -17,6 +17,6 @@ void led_init(void)
         LOG_ERR("Failed to configure LED GPIO: %d", ret);
     } else {
         gpio_pin_set_dt(&led, 0);
-        LOG_INF("LED initialized successfully on pin PA5");
+        LOG_INF("LED initialized successfully");
     }
 }

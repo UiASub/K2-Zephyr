@@ -113,7 +113,7 @@ pip install -r "$ZephyrPath\zephyr\scripts\requirements.txt"
 
 Set-Location "$ZephyrPath\zephyr"
 Invoke-Step "west sdk install --toolchains arm-zephyr-eabi" { west sdk install --toolchains arm-zephyr-eabi }
-Invoke-Step "west config --local build.board nucleo_f767zi" { west config --local build.board nucleo_f767zi }
+Invoke-Step "west config --local build.board nucleo_h755zi_q/stm32h755xx/m7" { west config --local build.board nucleo_h755zi_q/stm32h755xx/m7 }
 
 # 6. Clone K2-Zephyr
 if (-not (Test-Path "$ZephyrPath\\K2-Zephyr")) {

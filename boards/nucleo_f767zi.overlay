@@ -46,6 +46,11 @@
 
 /* Create Bit-Bang SPI Controller */
 / {
+    aliases {
+        vesc-uart = &usart6;
+        vn100s = &vn100s;
+    };
+
     spi_bb: spi-bitbang {
         compatible = "zephyr,spi-bitbang";
         status = "okay";
