@@ -51,7 +51,7 @@ jobs:
       - name: Get pushed tag
         id: version
         run: |
-          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
 
       ###########################################################################
       # System deps
