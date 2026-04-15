@@ -1,22 +1,48 @@
-/ {
-    aliases {
-        vesc-uart = &lpuart1;
-        vn100s = &vn100s;
-    };
+/* Enable USART6 for VESC communication
+ * TX = PC6 (D1 on CN10 pin 2)
+ * RX = PC7 (D0 on CN10 pin 1)
+ */
+&usart6 {
+    status = "okay";
+    pinctrl-0 = <&usart6_tx_pc6 &usart6_rx_pc7>;
+    pinctrl-names = "default";
+    current-speed = <115200>;
 };
 
+/* Disable HW SPI1 */
 &spi1 {
-    pinctrl-0 = <&spi1_sck_pa5 &spi1_miso_pa6 &spi1_mosi_pb5>;
-    pinctrl-names = "default";
-    cs-gpios = <&gpiod 14 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-    status = "okay";
+    status = "disabled";
+};
 
-    vn100s: vn100s@0 {
-        compatible = "vectornav,vn100s";
-        reg = <0>;
+/* Create Bit-Bang SPI Controller */
+/ {
+    aliases {
+        vesc-uart = &usart6;
+        vn100s = &vn100s;
+    };
+
+    spi_bb: spi-bitbang {
+        compatible = "zephyr,spi-bitbang";
         status = "okay";
-        spi-max-frequency = <1000000>;
-        duplex = <0>;
-        frame-format = <0>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        /* D13 = PA5 */
+        clk-gpios = <&gpioa 5 GPIO_ACTIVE_HIGH>;
+        /* D4  = PF14 (actual D4 on Nucleo-144) */
+        mosi-gpios = <&gpiof 14 GPIO_ACTIVE_HIGH>;
+        /* D12 = PA6 */
+        miso-gpios = <&gpioa 6 GPIO_ACTIVE_HIGH>;
+        /* D10 = PD14 */
+        cs-gpios = <&gpiod 14 GPIO_ACTIVE_LOW>;
+
+        vn100s: vn100s@0 {
+            compatible = "vectornav,vn100s";
+            reg = <0>;
+            status = "okay";
+            spi-max-frequency = <1000000>;
+            duplex = <0>;
+            frame-format = <0>;
+        };
     };
 };

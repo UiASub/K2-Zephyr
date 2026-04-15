@@ -28,7 +28,7 @@
 #include <string.h>
 
 #include "pid_config.h"
-#include "net.h"
+#include "../net/net.h"
 
 LOG_MODULE_REGISTER(pid_config, LOG_LEVEL_INF);
 

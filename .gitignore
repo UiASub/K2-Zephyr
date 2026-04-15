@@ -16,3 +16,7 @@ build-h755/
 # Python virtual environment
 .venv
 .venv/*
+
+# Local environment and assistant settings
+.env
+.claude/*

@@ -7,8 +7,7 @@
  * 3. Logging system for debug output
  * 4. Networking (UDP server)
  * 
- * Target Hardware: ST NUCLEO-F767ZI development board
- * - Green LED on pin PA5 (controlled via GPIO)
+ * Target Hardware: ST NUCLEO-F767ZI or NUCLEO-H755ZI-Q development board
  * - UART console for debug messages (115200 baud via ST-LINK USB)
  */
 
@@ -19,15 +18,19 @@
 #include <zephyr/net/socket.h> // added for zsock_close
 #include <zephyr/drivers/uart.h>
 #include <stdint.h>
-#include "led.h"
-#include "net.h"
+#include "net/net.h"
 #include "control.h"
-#include "vn100s.h"
-#include "resource_monitor.h"
+#include "imu/vn100s.h"
+#include "net/resource_monitor.h"
 #include "vesc/vesc_protocol.h"
 #include "vesc/vesc_uart_zephyr.h"
-#include "pid_config.h"
-#include "axis_config.h"
+#include "pid/pid_config.h"
+#include "imu/axis_config.h"
+#include "net/control_telemetry.h"
+#include "net/setpoint_override.h"
+
+/* Defined in net/log_backend_udp.c */
+void log_backend_udp_topside_start(void);
 
 // Register this source file as a log module named "k2_app" with INFO level
 // This allows us to use LOG_INF(), LOG_ERR(), etc. in our code
@@ -54,14 +57,14 @@ int main(void)
      * Set up all hardware and software components before main loop
      */
     
-    // Initialize the LED GPIO pin
-    led_init();
-
     // Initialize ROV control system
     rov_control_init();
 
     // Initialize networking
     network_init();
+
+    // Activate UDP log backend (must be after network_init)
+    log_backend_udp_topside_start();
 
     // Start ROV control thread
     rov_control_start();
@@ -77,6 +80,12 @@ int main(void)
 
     // Start axis config listener
     axis_config_start();
+
+    // Start control telemetry sender
+    control_telemetry_start();
+
+    // Start setpoint override listener
+    setpoint_override_start();
 
     /*
      * MAIN APPLICATION LOOP

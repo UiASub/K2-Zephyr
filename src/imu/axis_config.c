@@ -33,7 +33,7 @@
 #include <string.h>
 
 #include "axis_config.h"
-#include "net.h"
+#include "../net/net.h"
 
 LOG_MODULE_REGISTER(axis_config, LOG_LEVEL_INF);
 

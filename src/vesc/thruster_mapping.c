@@ -84,16 +84,19 @@ void thruster_calculate_6dof(const float inputs[6], thruster_output_t *output)
         if (abs_val > max_output) max_output = abs_val;
     }
     
-    /* Log if any thruster has significant output */
-    if (max_output > 0.01f) {
-        /* Convert to percentage integers for logging */
+    /* Rate-limited thruster summary: log at most once per second (50 cycles) */
+    static int log_counter;
+    if (max_output > 0.01f && ++log_counter >= 50) {
+        log_counter = 0;
         int t_pct[8];
         for (int i = 0; i < 8; i++) {
             t_pct[i] = (int)(output->thruster[i] * 100);
         }
         LOG_INF("T[TLF:%+3d TLB:%+3d BLB:%+3d BLF:%+3d BRF:%+3d BRB:%+3d TRB:%+3d TRF:%+3d]%%",
-                t_pct[0], t_pct[1], t_pct[2], t_pct[3], 
+                t_pct[0], t_pct[1], t_pct[2], t_pct[3],
                 t_pct[4], t_pct[5], t_pct[6], t_pct[7]);
+    } else if (max_output <= 0.01f) {
+        log_counter = 0;
     }
 }
 
