@@ -14,3 +14,7 @@ build/*
 # Python virtual environment
 .venv
 .venv/*
+
+# Local environment and assistant settings
+.env
+.claude/*
