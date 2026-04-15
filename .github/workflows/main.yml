@@ -4,8 +4,6 @@ name: Build & Release (Zephyr 4.2 – Optimized)
 # Tag syntax: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#example-including-branches-and-tags
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*.*.*'
 
@@ -57,7 +55,7 @@ jobs:
       - name: Get pushed tag
         id: version
         run: |
-          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
 
       ###########################################################################
       # System deps
@@ -149,6 +147,7 @@ jobs:
   ###############################################################################
   release:
     needs: build
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
 
     steps:
