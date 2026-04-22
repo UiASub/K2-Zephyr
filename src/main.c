@@ -28,6 +28,7 @@
 #include "imu/axis_config.h"
 #include "net/control_telemetry.h"
 #include "net/setpoint_override.h"
+#include "net/ota_confirm.h"
 
 /* Defined in net/log_backend_udp.c */
 void log_backend_udp_topside_start(void);
@@ -86,6 +87,9 @@ int main(void)
 
     // Start setpoint override listener
     setpoint_override_start();
+
+    // Confirm a trial MCUboot image only after the app and network come up
+    ota_confirm_init();
 
     /*
      * MAIN APPLICATION LOOP
