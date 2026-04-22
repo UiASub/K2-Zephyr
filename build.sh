@@ -7,10 +7,12 @@ set -e  # Exit on error
 
 board="nucleo_h755zi_q/stm32h755xx/m7"
 board_label="H7 (nucleo_h755zi_q/stm32h755xx/m7)"
+ota_build=0
 
 usage() {
-    echo "Usage: ./build.sh [--h7|--H7|--f7|--F7]"
+    echo "Usage: ./build.sh [--h7|--H7|--f7|--F7] [--ota|--OTA]"
     echo "Defaults to H7 if no board flag is provided."
+    echo "Use --ota to build the MCUboot + Ethernet OTA image."
 }
 
 while [[ $# -gt 0 ]]; do
@@ -22,6 +24,9 @@ while [[ $# -gt 0 ]]; do
         --f7|--F7)
             board="nucleo_f767zi"
             board_label="F7 (nucleo_f767zi)"
+            ;;
+        --ota|--OTA)
+            ota_build=1
             ;;
         --help)
             usage
@@ -42,8 +47,18 @@ cd ~/zephyrproject || exit 1
 # shellcheck source=/dev/null
 source .venv/bin/activate
 
-echo "Building K2-Zephyr project for ${board_label}..."
 cd ~/zephyrproject/K2-Zephyr || exit 1
-west build -p -b "$board"
-
-echo "Build complete for ${board_label}! Flash with: west flash"
+if [[ "$ota_build" -eq 1 ]]; then
+    if [[ "$board" == "nucleo_f767zi" ]]; then
+        build_dir="build-f767-ota"
+    else
+        build_dir="build-h755-ota"
+    fi
+    echo "Building K2-Zephyr OTA image for ${board_label}..."
+    west build --sysbuild -p -b "$board" -d "$build_dir" . -- "-DEXTRA_CONF_FILE=ota.conf"
+    echo "OTA build complete for ${board_label}! Flash with: west flash -d ${build_dir}"
+else
+    echo "Building K2-Zephyr project for ${board_label}..."
+    west build -p -b "$board"
+    echo "Build complete for ${board_label}! Flash with: west flash"
+fi
