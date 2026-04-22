@@ -1,3 +1,5 @@
+#include "nucleo_h755zi_q_stm32h755xx_m7_partitions.overlay"
+
 /* Enable USART6 for VESC communication
  * TX = PC6 (D1 on CN10 pin 2)
  * RX = PC7 (D0 on CN10 pin 1)

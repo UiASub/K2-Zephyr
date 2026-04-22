@@ -1,0 +1,7 @@
+#include "../../../boards/nucleo_h755zi_q_stm32h755xx_m7_partitions.overlay"
+
+/ {
+    chosen {
+        zephyr,code-partition = &boot_partition;
+    };
+};
