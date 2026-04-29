@@ -5,10 +5,7 @@
 idea/
 
 # Build directories
-build/
-build/*
-build-f767/
-build-h755/
+build*/
 
 # macOS
 .DS_Store
