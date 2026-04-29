@@ -11,40 +11,30 @@
     current-speed = <115200>;
 };
 
-/* Disable HW SPI1 */
-&spi1 {
-    status = "disabled";
-};
-
-/* Create Bit-Bang SPI Controller */
 / {
     aliases {
         vesc-uart = &usart6;
         vn100s = &vn100s;
     };
+};
 
-    spi_bb: spi-bitbang {
-        compatible = "zephyr,spi-bitbang";
+/* VN-100S IMU on the ST Zio/Morpho SPI3 pins.
+ * SCK = PC10, MISO = PC11, MOSI = PC12, CS = PA4.
+ */
+&spi3 {
+    status = "okay";
+    pinctrl-0 = <&spi3_sck_pc10 &spi3_miso_pc11 &spi3_mosi_pc12>;
+    pinctrl-names = "default";
+    cs-gpios = <&gpioa 4 GPIO_ACTIVE_LOW>;
+    #address-cells = <1>;
+    #size-cells = <0>;
+
+    vn100s: vn100s@0 {
+        compatible = "vectornav,vn100s";
+        reg = <0>;
         status = "okay";
-        #address-cells = <1>;
-        #size-cells = <0>;
-
-        /* D13 = PA5 */
-        clk-gpios = <&gpioa 5 GPIO_ACTIVE_HIGH>;
-        /* D11 = PB5 */
-        mosi-gpios = <&gpiob 5 GPIO_ACTIVE_HIGH>;
-        /* D12 = PA6 */
-        miso-gpios = <&gpioa 6 GPIO_ACTIVE_HIGH>;
-        /* D10 = PD14 */
-        cs-gpios = <&gpiod 14 GPIO_ACTIVE_LOW>;
-
-        vn100s: vn100s@0 {
-            compatible = "vectornav,vn100s";
-            reg = <0>;
-            status = "okay";
-            spi-max-frequency = <1000000>;
-            duplex = <0>;
-            frame-format = <0>;
-        };
+        spi-max-frequency = <1000000>;
+        duplex = <0>;
+        frame-format = <0>;
     };
 };
