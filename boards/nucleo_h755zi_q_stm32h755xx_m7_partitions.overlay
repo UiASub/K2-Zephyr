@@ -5,6 +5,9 @@
 };
 
 &flash0 {
+    reg = <0x08000000 DT_SIZE_K(2048)>;
+    ranges = <0 0x08000000 DT_SIZE_K(2048)>;
+
     partitions {
         compatible = "fixed-partitions";
         #address-cells = <1>;
@@ -21,9 +24,9 @@
             reg = <0x00020000 0x00060000>;
         };
 
-        slot1_partition: partition@80000 {
+        slot1_partition: partition@100000 {
             label = "image-1";
-            reg = <0x00080000 0x00080000>;
+            reg = <0x00100000 0x00080000>;
         };
     };
 };
