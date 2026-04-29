@@ -117,6 +117,35 @@ slot_hash() {
     '
 }
 
+is_hash_active_confirmed() {
+    local hash="$1"
+    awk -v hash="$hash" '
+        /^[[:space:]]*image=/ {
+            if (in_slot && found_hash && active && confirmed) {
+                found = 1
+            }
+            in_slot = 1
+            found_hash = 0
+            active = 0
+            confirmed = 0
+            next
+        }
+        in_slot && /^[[:space:]]*flags:/ {
+            active = ($0 ~ /(^|[[:space:]])active([[:space:]]|$)/)
+            confirmed = ($0 ~ /(^|[[:space:]])confirmed([[:space:]]|$)/)
+        }
+        in_slot && /^[[:space:]]*hash:/ {
+            found_hash = ($2 == hash)
+        }
+        END {
+            if (in_slot && found_hash && active && confirmed) {
+                found = 1
+            }
+            exit(found ? 0 : 1)
+        }
+    '
+}
+
 echo "MCU: ${MCU_IP}:${MCU_PORT}"
 echo "Image: ${IMAGE}"
 echo
@@ -159,11 +188,15 @@ deadline=$((SECONDS + POLL_SECONDS))
 while (( SECONDS < deadline )); do
     if final_list="$(mcumgr image list 2>/dev/null)"; then
         printf '%s\n' "$final_list"
-        exit 0
+        if printf '%s\n' "$final_list" | is_hash_active_confirmed "$test_hash"; then
+            echo "Uploaded image is active and confirmed."
+            exit 0
+        fi
+        echo "MCU responded, waiting for uploaded image to become active confirmed..."
     fi
     sleep 2
 done
 
-echo "Warning: MCU did not respond to MCUmgr within ${POLL_SECONDS}s after reset." >&2
-echo "Check power, Ethernet link, and the direct-link network profile." >&2
+echo "Warning: uploaded image did not become active confirmed within ${POLL_SECONDS}s after reset." >&2
+echo "Check power, Ethernet link, MCUmgr image state, and serial logs." >&2
 exit 1
