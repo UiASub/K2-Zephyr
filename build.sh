@@ -44,8 +44,13 @@ done
 echo "Setting up Zephyr environment..."
 cd ~/zephyrproject || exit 1
 
-# shellcheck source=/dev/null
-source .venv/bin/activate
+if [[ -f .venv/bin/activate ]]; then
+    # shellcheck source=/dev/null
+    source .venv/bin/activate
+elif ! command -v west >/dev/null 2>&1; then
+    echo "west not found. Install west or create ~/zephyrproject/.venv." >&2
+    exit 1
+fi
 
 cd ~/zephyrproject/K2-Zephyr || exit 1
 if [[ "$ota_build" -eq 1 ]]; then
