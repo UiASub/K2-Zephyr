@@ -24,6 +24,9 @@ static const struct spi_dt_spec vn_spi = SPI_DT_SPEC_GET(
 /* VN-100S SPI binary protocol commands */
 #define VN_CMD_READ  0x01
 
+#define VN_INIT_RETRY_MS 10000
+#define VN_STALE_REINIT_MS 10000
+
 /* Register IDs */
 #define VN_REG_MODEL       1    /* Model string (24 bytes ASCII) */
 #define VN_REG_YPR_RATE_AC 239  /* YPR + rates + linear accel body (9x float32 = 36 bytes) */
@@ -168,6 +171,7 @@ static bool vn_sane(float yaw, float pitch, float roll,
 static float last_yaw, last_pitch, last_roll;
 static float last_yr, last_pr, last_rr;
 static float last_ax, last_ay, last_az;
+static int64_t last_sample_time;
 
 void vn100s_get_ypr(float *yaw, float *pitch, float *roll)
 {
@@ -201,13 +205,22 @@ void vn100s_task(void *p1, void *p2, void *p3)
     LOG_DBG("VN-100S thread starting");
 
     struct vn100s_data dev;
-    int err = vn100s_init(&dev);
-    if (err) {
-        LOG_ERR("VN-100S init failed: %d", err);
-        return;
-    }
+    bool initialized = false;
+    int err = 0;
 
     while (1) {
+        if (!initialized) {
+            err = vn100s_init(&dev);
+            if (err) {
+                LOG_ERR("VN-100S init failed: %d; retrying in %d s",
+                        err, VN_INIT_RETRY_MS / 1000);
+                k_msleep(VN_INIT_RETRY_MS);
+                continue;
+            }
+            initialized = true;
+            last_sample_time = k_uptime_get();
+        }
+
         float yaw, pitch, roll, yr, pr, rr, ax, ay, az;
         err = vn100s_read_all(&yaw, &pitch, &roll, &yr, &pr, &rr, &ax, &ay, &az);
         if (!err) {
@@ -221,6 +234,7 @@ void vn100s_task(void *p1, void *p2, void *p3)
                 last_ax    = ax;
                 last_ay    = ay;
                 last_az    = az;
+                last_sample_time = k_uptime_get();
             } else {
                 LOG_WRN("VN-100S: corrupt sample "
                         "(y=%d p=%d r=%d)",
@@ -229,6 +243,13 @@ void vn100s_task(void *p1, void *p2, void *p3)
         } else {
             LOG_ERR("VN-100S read err %d", err);
         }
+
+        if ((k_uptime_get() - last_sample_time) > VN_STALE_REINIT_MS) {
+            LOG_WRN("VN-100S has no valid data for %d s; reinitializing",
+                    VN_STALE_REINIT_MS / 1000);
+            initialized = false;
+        }
+
         k_msleep(50);
     }
 }
