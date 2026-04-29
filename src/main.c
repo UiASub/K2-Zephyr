@@ -74,6 +74,9 @@ int main(void)
     // Start resource monitor thread
     resource_monitor_start();
 
+    // Start IMU sensor telemetry sender
+    sensor_sender_start();
+
     // Start UDP server thread
     udp_server_start();
 
