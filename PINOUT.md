@@ -1,14 +1,14 @@
 # K2-Zephyr Pinout Reference
 
-## IMU (VN-100S) - SPI Bit-Bang
+## IMU (VN-100S) - SPI3
 | Function | Pin | Nucleo Label | Direction |
 |----------|-----|--------------|-----------|
-| CLK      | PA5 | D13          | Output    |
-| MOSI     | PB5 | D11          | Output    |
-| MISO     | PA6 | D12          | Input     |
-| CS       | PD14| D10          | Output    |
+| SCK      | PC10| SPI_SCK      | Output    |
+| MISO     | PC11| SPI_MISO     | Input     |
+| MOSI     | PC12| SPI_MOSI     | Output    |
+| CS       | PA4 | SPI_CS       | Output    |
 
-**Interface**: SPI (bit-bang), 1 MHz max
+**Interface**: SPI3, 1 MHz max
 **Data**: Yaw/Pitch/Roll, angular rates, gravity-compensated acceleration
 
 ---
@@ -38,17 +38,9 @@
 | TXD1     | PB13| Output    |
 
 **Interface**: Ethernet MAC + PHY
-**IP**: 192.168.1.100
-
----
-
-## Status LED - GPIO
-| Function | Pin | Nucleo Label | Direction |
-|----------|-----|--------------|-----------|
-| LED      | PA5 | D13          | Output    |
+**IP**: 10.77.0.2
 
 ---
 
 ## Notes
-- **PA5** is shared between IMU CLK (SPI) and LED. Currently configured as SPI CLK.
 - All pins are on STM32H755ZI (Nucleo-144 board).

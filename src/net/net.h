@@ -24,6 +24,7 @@ extern int udp_sock;
 
 void network_init(void);
 void udp_server_start(void);
+void sensor_sender_start(void);
 
 /* Shared CRC32 (IEEE 802.3) — used by net.c and resource_monitor.c */
 uint32_t crc32_calc(const void *data, size_t length);
