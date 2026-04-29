@@ -30,12 +30,12 @@ foreach ($arg in $args) {
     }
 }
 
-if (-not (Test-Path $venvActivate)) {
-    Write-Host "Virtualenv activation script not found: $venvActivate"
+if (Test-Path $venvActivate) {
+    & $venvActivate
+} elseif (-not (Get-Command west -ErrorAction SilentlyContinue)) {
+    Write-Host "west not found. Install west or create $workspace\.venv."
     exit 1
 }
-
-& $venvActivate
 
 Set-Location $projectPath
 Write-Host "Building K2-Zephyr for $boardLabel..."
