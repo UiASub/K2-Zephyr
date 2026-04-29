@@ -71,6 +71,43 @@ function Get-SlotHash {
     return $null
 }
 
+function Test-HashActiveConfirmed {
+    param(
+        [string]$Text,
+        [string]$Hash
+    )
+
+    $inSlot = $false
+    $foundHash = $false
+    $active = $false
+    $confirmed = $false
+
+    foreach ($line in ($Text -split "\r?\n")) {
+        if ($line -match "^\s*image=") {
+            if ($inSlot -and $foundHash -and $active -and $confirmed) {
+                return $true
+            }
+            $inSlot = $true
+            $foundHash = $false
+            $active = $false
+            $confirmed = $false
+            continue
+        }
+
+        if ($inSlot -and $line -match "^\s*flags:\s*(.*)") {
+            $flags = $Matches[1] -split "\s+"
+            $active = $flags -contains "active"
+            $confirmed = $flags -contains "confirmed"
+        }
+
+        if ($inSlot -and $line -match "^\s*hash:\s*([0-9a-fA-F]+)") {
+            $foundHash = $Matches[1].ToLowerInvariant() -eq $Hash.ToLowerInvariant()
+        }
+    }
+
+    return $inSlot -and $foundHash -and $active -and $confirmed
+}
+
 $script:McumgrBin = Find-Mcumgr
 
 if (-not (Test-Path $Image)) {
@@ -121,13 +158,20 @@ Write-Host "Waiting for MCU to come back..."
 $deadline = (Get-Date).AddSeconds($PollSeconds)
 while ((Get-Date) -lt $deadline) {
     try {
-        Write-Host (Invoke-Mcumgr image list)
-        exit 0
+        $finalList = Invoke-Mcumgr image list
+        Write-Host $finalList
+        if (Test-HashActiveConfirmed -Text $finalList -Hash $testHash) {
+            Write-Host "Uploaded image is active and confirmed."
+            exit 0
+        }
+        Write-Host "MCU responded, waiting for uploaded image to become active confirmed..."
     } catch {
         Start-Sleep -Seconds 2
+        continue
     }
+    Start-Sleep -Seconds 2
 }
 
-Write-Warning "MCU did not respond to MCUmgr within ${PollSeconds}s after reset."
-Write-Warning "Check power, Ethernet link, and the direct-link network profile."
+Write-Warning "Uploaded image did not become active confirmed within ${PollSeconds}s after reset."
+Write-Warning "Check power, Ethernet link, MCUmgr image state, and serial logs."
 exit 1
