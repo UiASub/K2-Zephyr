@@ -158,14 +158,16 @@ static int configure_static_ip(struct net_if *iface)
     // Set the netmask for the configured IP address
     net_if_ipv4_set_netmask_by_addr(iface, &addr, &netmask);
 
-    // Configure gateway (default route)
-    ret = parse_ipv4_addr(STATIC_GATEWAY, &gateway);
-    if (ret < 0) {
-        LOG_ERR("Invalid gateway format: %s", STATIC_GATEWAY);
-        return -EINVAL;
+    if (strcmp(STATIC_GATEWAY, "0.0.0.0") != 0) {
+        // Configure gateway (default route)
+        ret = parse_ipv4_addr(STATIC_GATEWAY, &gateway);
+        if (ret < 0) {
+            LOG_ERR("Invalid gateway format: %s", STATIC_GATEWAY);
+            return -EINVAL;
+        }
+        // Set the default gateway for the interface
+        net_if_ipv4_set_gw(iface, &gateway);
     }
-    // Set the default gateway for the interface
-    net_if_ipv4_set_gw(iface, &gateway);
 
     // Log the complete static IP configuration for verification
     LOG_INF("Static IP: %s/%s gw %s", STATIC_IP_ADDR, STATIC_NETMASK, STATIC_GATEWAY);
