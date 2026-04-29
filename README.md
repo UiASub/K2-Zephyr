@@ -97,6 +97,9 @@ The application confirms the new image automatically after it finishes startup
 and the network interface is up. If the new image fails to boot or is rebooted
 before confirmation, MCUboot reverts to the previous image on the next reset.
 
+See [Ethernet OTA setup](ETHERNET_OTA.md) for direct-link network setup,
+manual Fedora and Windows steps, and validation notes.
+
 ## Release
 
 To create a new release, push a tag:
