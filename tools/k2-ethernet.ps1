@@ -100,6 +100,7 @@ function Set-K2Link {
 
     Write-Host "Configured $($adapter.Name) as $HostIp/$PrefixLength for K2 direct link."
     Test-K2Ping
+    Test-Mcumgr
 }
 
 function Clear-K2Link {
@@ -118,6 +119,7 @@ function Show-K2Status {
     Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
         Where-Object { $_.IPAddress -eq $HostIp -or $_.IPAddress -eq $McuIp } |
         Format-Table -AutoSize InterfaceAlias, IPAddress, PrefixLength
+    Test-Mcumgr
 }
 
 function Test-K2Ping {
@@ -127,6 +129,15 @@ function Test-K2Ping {
     } else {
         Write-Warning "MCU did not respond to ping at $McuIp. The Ethernet cable may be disconnected, the MCU may be off, or ICMP may be unavailable."
     }
+}
+
+function Test-Mcumgr {
+    if (Get-Command mcumgr -ErrorAction SilentlyContinue) {
+        mcumgr version
+        return
+    }
+
+    Write-Warning "mcumgr is not installed or not on PATH. Install Go, run 'go install github.com/apache/mynewt-mcumgr-cli/mcumgr@latest', and make sure `$env:USERPROFILE\go\bin is on PATH."
 }
 
 switch ($Action) {

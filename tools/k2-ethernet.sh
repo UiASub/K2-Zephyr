@@ -127,10 +127,28 @@ ping_mcu() {
     fi
 }
 
+check_mcumgr() {
+    if command -v mcumgr >/dev/null 2>&1; then
+        return
+    fi
+
+    echo "Warning: mcumgr is not installed or not on PATH." >&2
+    echo "Install it with:" >&2
+    echo "  sudo dnf install golang" >&2
+    echo "  go install github.com/apache/mynewt-mcumgr-cli/mcumgr@latest" >&2
+    echo "Then make sure ~/go/bin is on PATH." >&2
+}
+
 status_all() {
     nmcli device status
     echo
     nmcli connection show --active
+    echo
+    if command -v mcumgr >/dev/null 2>&1; then
+        mcumgr version
+    else
+        check_mcumgr
+    fi
 }
 
 up() {
@@ -155,6 +173,7 @@ up() {
 
     echo "Configured ${iface} as ${HOST_IP}/${PREFIX} for K2 direct link."
     ping_mcu
+    check_mcumgr
 }
 
 down() {

@@ -14,6 +14,19 @@ the main LAN.
 
 ## Fedora
 
+Install the MCUmgr CLI:
+
+```bash
+sudo dnf install golang
+go install github.com/apache/mynewt-mcumgr-cli/mcumgr@latest
+```
+
+Make sure `~/go/bin` is on `PATH`, then check:
+
+```bash
+mcumgr version
+```
+
 The helper script shows a menu of Ethernet adapters, recommends likely USB
 Ethernet adapters first, configures a NetworkManager profile for the selected
 adapter, and then tries to ping the MCU. If the ping fails, the script warns
@@ -45,6 +58,19 @@ Replace `eth0` with the Ethernet interface connected to the MCU. A USB Ethernet
 adapter is usually the right choice when present.
 
 ## Windows
+
+Install Go and the MCUmgr CLI:
+
+```powershell
+winget install GoLang.Go
+go install github.com/apache/mynewt-mcumgr-cli/mcumgr@latest
+```
+
+Make sure `%USERPROFILE%\go\bin` is on `PATH`, then check:
+
+```powershell
+mcumgr version
+```
 
 Run PowerShell as Administrator. The helper script shows a menu of physical
 Ethernet adapters, recommends likely USB Ethernet adapters first, configures
@@ -80,5 +106,9 @@ After flashing the OTA build once over USB, verify the board in this order:
 4. Upload a signed image, mark it for test boot, reset the board, reconnect,
    and only confirm the image after the new firmware is reachable.
 
-The current build exposes MCUmgr over UDP. Install a compatible `mcumgr` client
-on the topside machine before doing the full upload and swap test.
+The current build exposes MCUmgr over UDP. Useful first checks:
+
+```bash
+mcumgr --conntype udp --connstring=[10.77.0.2]:1337 image list
+mcumgr --conntype udp --connstring=[10.77.0.2]:1337 image upload build-h755-ota/K2-Zephyr/zephyr/zephyr.signed.bin
+```
