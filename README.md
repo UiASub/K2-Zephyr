@@ -96,6 +96,11 @@ the device on port `1337`, mark the image for test boot, and reset the device.
 The application confirms the new image automatically after it finishes startup
 and the network interface is up. If the new image fails to boot or is rebooted
 before confirmation, MCUboot reverts to the previous image on the next reset.
+The field helper wraps the upload/test/reset flow:
+
+```bash
+./tools/k2-ota.sh
+```
 
 See [Ethernet OTA setup](ETHERNET_OTA.md) for direct-link network setup,
 manual Fedora and Windows steps, and validation notes.

@@ -110,5 +110,35 @@ The current build exposes MCUmgr over UDP. Useful first checks:
 
 ```bash
 mcumgr --conntype udp '--connstring=[10.77.0.2]:1337' image list
+```
+
+For field updates, use the OTA helper instead of running the MCUmgr commands by
+hand. It lists the current images, uploads the signed image, marks the uploaded
+slot for test boot, resets the MCU, and then polls until MCUmgr responds again:
+
+```bash
+./tools/k2-ota.sh
+```
+
+The default image is `build-h755-ota/K2-Zephyr/zephyr/zephyr.signed.bin`. To
+upload a different signed image:
+
+```bash
+./tools/k2-ota.sh path/to/zephyr.signed.bin
+```
+
+On Windows:
+
+```powershell
+.\tools\k2-ota.ps1
+```
+
+Manual fallback:
+
+```bash
 mcumgr --conntype udp '--connstring=[10.77.0.2]:1337' image upload build-h755-ota/K2-Zephyr/zephyr/zephyr.signed.bin
+mcumgr --conntype udp '--connstring=[10.77.0.2]:1337' image list
+mcumgr --conntype udp '--connstring=[10.77.0.2]:1337' image test <slot-1-hash>
+mcumgr --conntype udp '--connstring=[10.77.0.2]:1337' reset
+mcumgr --conntype udp '--connstring=[10.77.0.2]:1337' image list
 ```
