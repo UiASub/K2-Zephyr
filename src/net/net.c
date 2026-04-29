@@ -39,6 +39,8 @@ bool network_ready = false;  // Flag to track network interface status
 int udp_sock = -1;                                    // UDP socket file descriptor
 K_THREAD_STACK_DEFINE(udp_thread_stack, 2048);      // Stack space for UDP thread
 struct k_thread udp_thread_data;                     // Thread control block
+K_THREAD_STACK_DEFINE(sensor_thread_stack, 4096);
+static struct k_thread sensor_thread_data;
 
 // Pre-computed CRC32 lookup table for faster calculation
 static const uint32_t crc32_table[256] = {
@@ -337,7 +339,7 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
 
     sock = zsock_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock < 0) {
-        LOG_ERR("Failed to create sensor UDP socket");
+        LOG_ERR("Failed to create sensor UDP socket: %d", sock);
         return;
     }
 
@@ -345,10 +347,18 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
     dest_addr.sin_port = htons(SENSOR_PORT);
 
     int on = 1;
-    zsock_setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
-    zsock_inet_pton(AF_INET, TOPSIDE_IP, &dest_addr.sin_addr);
+    int ret = zsock_setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
+    if (ret < 0) {
+        LOG_WRN("Sensor UDP broadcast enable failed: %d", ret);
+    }
+    ret = zsock_inet_pton(AF_INET, TOPSIDE_IP, &dest_addr.sin_addr);
+    if (ret <= 0) {
+        LOG_ERR("Invalid sensor destination address: %s", TOPSIDE_IP);
+        zsock_close(sock);
+        return;
+    }
 
-    LOG_DBG("Sensor UDP sender started (port %d)", SENSOR_PORT);
+    LOG_INF("Sensor UDP sender started (%s:%d)", TOPSIDE_IP, SENSOR_PORT);
 
     while (1) {
         vn100s_get_ypr(&yaw, &pitch, &roll);
@@ -364,14 +374,34 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
             (double)ax, (double)ay, (double)az);
 
         if (len > 0) {
-            zsock_sendto(sock, buffer, len, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+            ret = zsock_sendto(sock, buffer, len, 0,
+                               (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+            if (ret < 0) {
+                LOG_WRN("Sensor UDP send failed: %d", ret);
+            }
+        } else {
+            LOG_WRN("Sensor JSON format failed: %d", len);
         }
 
         k_msleep(200);
     }
 }
 
-K_THREAD_DEFINE(sensor_tid, 2048, sensor_sender_thread, NULL, NULL, NULL, 7, 0, 0);
+void sensor_sender_start(void)
+{
+    k_tid_t thread_id = k_thread_create(&sensor_thread_data,
+                                        sensor_thread_stack,
+                                        K_THREAD_STACK_SIZEOF(sensor_thread_stack),
+                                        sensor_sender_thread,
+                                        NULL, NULL, NULL,
+                                        9, 0, K_NO_WAIT);
+
+    if (thread_id != NULL) {
+        k_thread_name_set(thread_id, "sensor_udp");
+    } else {
+        LOG_ERR("Failed to create sensor UDP thread");
+    }
+}
 
 /**
  * Start the UDP server by creating and launching the server thread
