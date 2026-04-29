@@ -4,7 +4,7 @@
 | Function | Pin | Nucleo Label | Direction |
 |----------|-----|--------------|-----------|
 | CLK      | PA5 | D13          | Output    |
-| MOSI     | PF14| D4           | Output    |
+| MOSI     | PB5 | D11          | Output    |
 | MISO     | PA6 | D12          | Input     |
 | CS       | PD14| D10          | Output    |
 
@@ -51,4 +51,4 @@
 
 ## Notes
 - **PA5** is shared between IMU CLK (SPI) and LED. Currently configured as SPI CLK.
-- All pins are on STM32F767ZI (Nucleo-144 board).
+- All pins are on STM32H755ZI (Nucleo-144 board).

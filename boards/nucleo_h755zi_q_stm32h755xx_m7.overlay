@@ -31,8 +31,8 @@
 
         /* D13 = PA5 */
         clk-gpios = <&gpioa 5 GPIO_ACTIVE_HIGH>;
-        /* D4  = PF14 (actual D4 on Nucleo-144) */
-        mosi-gpios = <&gpiof 14 GPIO_ACTIVE_HIGH>;
+        /* D11 = PB5 */
+        mosi-gpios = <&gpiob 5 GPIO_ACTIVE_HIGH>;
         /* D12 = PA6 */
         miso-gpios = <&gpioa 6 GPIO_ACTIVE_HIGH>;
         /* D10 = PD14 */
