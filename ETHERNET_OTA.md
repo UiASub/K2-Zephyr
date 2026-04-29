@@ -109,6 +109,6 @@ After flashing the OTA build once over USB, verify the board in this order:
 The current build exposes MCUmgr over UDP. Useful first checks:
 
 ```bash
-mcumgr --conntype udp --connstring=[10.77.0.2]:1337 image list
-mcumgr --conntype udp --connstring=[10.77.0.2]:1337 image upload build-h755-ota/K2-Zephyr/zephyr/zephyr.signed.bin
+mcumgr --conntype udp '--connstring=[10.77.0.2]:1337' image list
+mcumgr --conntype udp '--connstring=[10.77.0.2]:1337' image upload build-h755-ota/K2-Zephyr/zephyr/zephyr.signed.bin
 ```
