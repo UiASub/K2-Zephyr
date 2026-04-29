@@ -17,6 +17,7 @@
 #define CONTROL_TELEM_PORT 5005
 #define LOG_UDP_PORT       5006
 #define SETPOINT_OVR_PORT  5007
+#define SYSTEM_CONTROL_PORT 5008
 
 extern bool network_ready;
 extern int udp_sock;
