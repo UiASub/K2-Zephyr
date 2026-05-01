@@ -13,7 +13,7 @@ Official Setup Guide: <https://docs.zephyrproject.org/4.2.0/develop/getting_star
 
 ### Recommended version
 
-- **Python**: 3.11
+- **Python**: 3.12
 
 ## Quick Installation
 
