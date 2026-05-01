@@ -6,9 +6,9 @@
 
 /* Network addresses */
 #define STATIC_DEVICE_IP   "10.77.0.2"
-#define TOPSIDE_IP         "10.77.0.255"
+#define TOPSIDE_IP         "100.116.215.34"
 #define STATIC_NETMASK     "255.255.255.0"
-#define STATIC_GATEWAY     "0.0.0.0"
+#define STATIC_GATEWAY     "10.77.0.1"
 #define UDP_COMMAND_PORT   12345
 #define TELEMETRY_UDP_PORT 12346
 #define SENSOR_PORT        5002

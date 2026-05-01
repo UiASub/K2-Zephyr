@@ -36,9 +36,6 @@ static void ctrl_telem_thread(void *a, void *b, void *c)
         return;
     }
 
-    int on = 1;
-    zsock_setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
-
     struct sockaddr_in dest = {
         .sin_family = AF_INET,
         .sin_port   = htons(CONTROL_TELEM_PORT),

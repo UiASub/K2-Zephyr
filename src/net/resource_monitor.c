@@ -252,9 +252,6 @@ static void monitor_thread(void *a, void *b, void *c)
     };
     zsock_inet_pton(AF_INET, TOPSIDE_IP, &dest.sin_addr);
 
-    int on = 1;
-    zsock_setsockopt(telem_sock, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
-
     LOG_INF("Resource monitor started (port %d)", TELEMETRY_UDP_PORT);
 
     uint32_t diag_counter = 0;

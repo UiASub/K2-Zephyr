@@ -102,9 +102,6 @@ void log_backend_udp_topside_start(void)
         return;
     }
 
-    int on = 1;
-    zsock_setsockopt(log_sock, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
-
     log_dest.sin_family = AF_INET;
     log_dest.sin_port   = htons(LOG_UDP_PORT);
     zsock_inet_pton(AF_INET, TOPSIDE_IP, &log_dest.sin_addr);

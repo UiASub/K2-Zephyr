@@ -346,11 +346,6 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
     dest_addr.sin_family = AF_INET;
     dest_addr.sin_port = htons(SENSOR_PORT);
 
-    int on = 1;
-    int ret = zsock_setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
-    if (ret < 0) {
-        LOG_WRN("Sensor UDP broadcast enable failed: %d", ret);
-    }
     ret = zsock_inet_pton(AF_INET, TOPSIDE_IP, &dest_addr.sin_addr);
     if (ret <= 0) {
         LOG_ERR("Invalid sensor destination address: %s", TOPSIDE_IP);
