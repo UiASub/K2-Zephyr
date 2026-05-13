@@ -18,3 +18,4 @@ build*/
 .env
 .claude/*
 CLAUDE.md
+agent.md
