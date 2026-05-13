@@ -38,3 +38,14 @@
         frame-format = <0>;
     };
 };
+
+/* MS5837-30BA depth sensor on Arduino D15/D14.
+ * SCL = PB8 (CN12 pin 3, also CN7 pin 2 / D15)
+ * SDA = PB9 (CN12 pin 5, also CN7 pin 4 / D14)
+ *
+ * The driver bitbangs these GPIOs at about 10 kHz to match the
+ * Arduino sketch that worked on the same Nucleo.
+ */
+&i2c1 {
+    status = "disabled";
+};

@@ -32,6 +32,7 @@ target_sources(app PRIVATE src/main.c
                            src/net/setpoint_override.c
                            src/net/system_control.c
                            src/net/ota_confirm.c
+                           src/depth/ms5837.c
                            src/imu/vn100s.c
                            src/imu/axis_config.c
                            src/vesc/vesc_protocol.c

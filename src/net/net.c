@@ -14,6 +14,7 @@
 
 #include "net.h"
 #include "../control.h"
+#include "../depth/ms5837.h"
 #include "../imu/vn100s.h"
 #include "resource_monitor.h"
 
@@ -328,10 +329,12 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
     
     int sock;
     struct sockaddr_in dest_addr;
-    char buffer[256];
+    char buffer[1024];
     float yaw, pitch, roll;
     float yr, pr, rr;
     float ax, ay, az;
+    ms5837_sample_t depth;
+    control_telemetry_t ctrl_telem;
 
     while (!network_ready) {
         k_sleep(K_MSEC(100));
@@ -364,21 +367,41 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
         vn100s_get_ypr(&yaw, &pitch, &roll);
         vn100s_get_rates(&yr, &pr, &rr);
         vn100s_get_accel(&ax, &ay, &az);
+        ms5837_get_sample(&depth);
+        control_get_telemetry(&ctrl_telem);
 
         int len = snprintf(buffer, sizeof(buffer),
             "{\"imu\":{\"yaw\":%.2f,\"pitch\":%.2f,\"roll\":%.2f,"
             "\"yr\":%.2f,\"pr\":%.2f,\"rr\":%.2f,"
-            "\"ax\":%.3f,\"ay\":%.3f,\"az\":%.3f}}",
+            "\"ax\":%.3f,\"ay\":%.3f,\"az\":%.3f},"
+            "\"depth\":{\"dpt\":%.2f,\"dptSet\":%.2f,"
+            "\"pressure_mbar\":%.1f,\"temperature_c\":%.2f,"
+            "\"valid\":%s,\"age_ms\":%lld,"
+            "\"addr\":%u,\"last_error\":%d,"
+            "\"scl_idle\":%d,\"sda_idle\":%d,"
+            "\"transport_error\":%u,"
+            "\"transport_mode\":%u,\"fw_depth_rev\":%u,"
+            "\"init_attempts\":%u,\"read_errors\":%u}}",
             (double)yaw, (double)pitch, (double)roll,
             (double)yr, (double)pr, (double)rr,
-            (double)ax, (double)ay, (double)az);
+            (double)ax, (double)ay, (double)az,
+            (double)depth.depth_m, (double)ctrl_telem.setpoint[2],
+            (double)depth.pressure_mbar, (double)depth.temperature_c,
+            depth.valid ? "true" : "false", (long long)depth.age_ms,
+            depth.addr, depth.last_error,
+            depth.scl_idle, depth.sda_idle,
+            depth.transport_error,
+            depth.transport_mode, depth.fw_depth_rev,
+            depth.init_attempts, depth.read_errors);
 
-        if (len > 0) {
+        if (len > 0 && len < sizeof(buffer)) {
             ret = zsock_sendto(sock, buffer, len, 0,
                                (struct sockaddr *)&dest_addr, sizeof(dest_addr));
             if (ret < 0) {
                 LOG_WRN("Sensor UDP send failed: %d", ret);
             }
+        } else if (len >= sizeof(buffer)) {
+            LOG_WRN("Sensor JSON truncated: %d >= %u", len, (unsigned int)sizeof(buffer));
         } else {
             LOG_WRN("Sensor JSON format failed: %d", len);
         }
