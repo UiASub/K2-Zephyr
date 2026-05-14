@@ -43,10 +43,15 @@ BUILD_ASSERT(DT_NODE_HAS_STATUS(MS5837_GPIO_NODE, okay),
 #define WATER_DENSITY_KG_M3      1029.0f
 #define GRAVITY_M_S2             9.80665f
 #define MBAR_TO_PA               100.0f
-#define MS5837_FW_DEPTH_REV      202605141u
-#define MS5837_TRANSPORT_GPIO_BITBANG 1u
-#define MS5837_TRANSPORT_MODE MS5837_TRANSPORT_GPIO_BITBANG
 #define MS5837_PROM_REQUIRED_WORDS 7u
+
+#define MS5837_RETURN_IF_ERR(expr)        \
+    do {                                  \
+        int _err = (expr);                \
+        if (_err) {                       \
+            return _err;                  \
+        }                                 \
+    } while (0)
 
 static uint8_t ms5837_addr = MS5837_ADDR;
 static uint16_t prom[8];
@@ -55,9 +60,6 @@ static bool surface_pressure_set;
 static bool bus_ready;
 static uint32_t init_attempts;
 static uint32_t read_errors;
-static int scl_idle_level = -1;
-static int sda_idle_level = -1;
-static uint32_t transport_error_detail;
 
 K_MUTEX_DEFINE(sample_mutex);
 static ms5837_sample_t latest_sample;
@@ -98,11 +100,8 @@ static int drive_sda_low(void)
 
 static int release_scl(void)
 {
-    int err = gpio_pin_configure(gpio_dev, MS5837_SCL_PIN,
-                                 GPIO_INPUT | GPIO_PULL_UP);
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(gpio_pin_configure(gpio_dev, MS5837_SCL_PIN,
+                                            GPIO_INPUT | GPIO_PULL_UP));
 
     for (uint32_t waited_us = 0; waited_us < MS5837_I2C_CLOCK_TIMEOUT_US;
          waited_us += 10) {
@@ -125,25 +124,13 @@ static int i2c_stop_condition(void);
 
 static int i2c_bus_clear(void)
 {
-    int err = release_sda();
-    if (err) {
-        return err;
-    }
-    err = release_scl();
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(release_sda());
+    MS5837_RETURN_IF_ERR(release_scl());
 
     for (int i = 0; i < 9 && get_sda() == 0; i++) {
-        err = drive_scl_low();
-        if (err) {
-            return err;
-        }
+        MS5837_RETURN_IF_ERR(drive_scl_low());
         i2c_delay();
-        err = release_scl();
-        if (err) {
-            return err;
-        }
+        MS5837_RETURN_IF_ERR(release_scl());
         i2c_delay();
     }
 
@@ -178,9 +165,6 @@ static int transport_init(void)
     }
 
     i2c_delay();
-    scl_idle_level = get_scl();
-    sda_idle_level = get_sda();
-
     err = i2c_bus_clear();
     if (err) {
         LOG_ERR("MS5837 bus clear failed: %d (SCL=%d SDA=%d)",
@@ -195,49 +179,28 @@ static int transport_init(void)
 
 static int i2c_start_condition(void)
 {
-    int err = release_sda();
-    if (err) {
-        return err;
-    }
-    err = release_scl();
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(release_sda());
+    MS5837_RETURN_IF_ERR(release_scl());
     i2c_bus_free_delay();
     i2c_delay();
 
-    err = drive_sda_low();
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(drive_sda_low());
     i2c_delay();
 
-    err = drive_scl_low();
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(drive_scl_low());
     i2c_delay();
     return 0;
 }
 
 static int i2c_stop_condition(void)
 {
-    int err = drive_sda_low();
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(drive_sda_low());
     i2c_delay();
 
-    err = release_scl();
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(release_scl());
     i2c_delay();
 
-    err = release_sda();
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(release_sda());
     i2c_delay();
     i2c_bus_free_delay();
     return 0;
@@ -246,42 +209,24 @@ static int i2c_stop_condition(void)
 static int i2c_write_byte(uint8_t value)
 {
     for (int bit = 7; bit >= 0; bit--) {
-        int err = (value & BIT(bit)) ? release_sda() : drive_sda_low();
-        if (err) {
-            return err;
-        }
+        MS5837_RETURN_IF_ERR((value & BIT(bit)) ? release_sda() : drive_sda_low());
         i2c_delay();
 
-        err = release_scl();
-        if (err) {
-            return err;
-        }
+        MS5837_RETURN_IF_ERR(release_scl());
         i2c_delay();
 
-        err = drive_scl_low();
-        if (err) {
-            return err;
-        }
+        MS5837_RETURN_IF_ERR(drive_scl_low());
         i2c_delay();
     }
 
-    int err = release_sda();
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(release_sda());
     i2c_delay();
 
-    err = release_scl();
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(release_scl());
     i2c_delay();
 
     int ack = get_sda();
-    err = drive_scl_low();
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(drive_scl_low());
     i2c_delay();
 
     return (ack == 0) ? 0 : -EIO;
@@ -290,50 +235,29 @@ static int i2c_write_byte(uint8_t value)
 static int i2c_read_byte(uint8_t *value, bool ack)
 {
     uint8_t rx = 0;
-    int err = release_sda();
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(release_sda());
 
     for (int bit = 7; bit >= 0; bit--) {
         i2c_delay();
-        err = release_scl();
-        if (err) {
-            return err;
-        }
+        MS5837_RETURN_IF_ERR(release_scl());
         i2c_delay();
 
         if (get_sda() > 0) {
             rx |= BIT(bit);
         }
 
-        err = drive_scl_low();
-        if (err) {
-            return err;
-        }
+        MS5837_RETURN_IF_ERR(drive_scl_low());
         i2c_delay();
     }
 
-    err = ack ? drive_sda_low() : release_sda();
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(ack ? drive_sda_low() : release_sda());
     i2c_delay();
 
-    err = release_scl();
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(release_scl());
     i2c_delay();
 
-    err = drive_scl_low();
-    if (err) {
-        return err;
-    }
-    err = release_sda();
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(drive_scl_low());
+    MS5837_RETURN_IF_ERR(release_sda());
     i2c_delay();
 
     *value = rx;
@@ -342,8 +266,6 @@ static int i2c_read_byte(uint8_t *value, bool ack)
 
 static int transport_write(uint8_t addr, const uint8_t *tx, size_t len)
 {
-    transport_error_detail = 0;
-
     int err = i2c_start_condition();
     if (err) {
         return err;
@@ -351,7 +273,6 @@ static int transport_write(uint8_t addr, const uint8_t *tx, size_t len)
 
     err = i2c_write_byte((addr << 1) | 0);
     if (err) {
-        transport_error_detail = (uint32_t)-err;
         (void)i2c_stop_condition();
         return err;
     }
@@ -359,7 +280,6 @@ static int transport_write(uint8_t addr, const uint8_t *tx, size_t len)
     for (size_t i = 0; i < len; i++) {
         err = i2c_write_byte(tx[i]);
         if (err) {
-            transport_error_detail = (uint32_t)-err;
             (void)i2c_stop_condition();
             return err;
         }
@@ -370,8 +290,6 @@ static int transport_write(uint8_t addr, const uint8_t *tx, size_t len)
 
 static int transport_read(uint8_t addr, uint8_t *rx, size_t len)
 {
-    transport_error_detail = 0;
-
     int err = i2c_start_condition();
     if (err) {
         return err;
@@ -379,7 +297,6 @@ static int transport_read(uint8_t addr, uint8_t *rx, size_t len)
 
     err = i2c_write_byte((addr << 1) | 1);
     if (err) {
-        transport_error_detail = (uint32_t)-err;
         (void)i2c_stop_condition();
         return err;
     }
@@ -387,7 +304,6 @@ static int transport_read(uint8_t addr, uint8_t *rx, size_t len)
     for (size_t i = 0; i < len; i++) {
         err = i2c_read_byte(&rx[i], i < (len - 1));
         if (err) {
-            transport_error_detail = (uint32_t)-err;
             (void)i2c_stop_condition();
             return err;
         }
@@ -405,15 +321,8 @@ static int read_prom_word(uint8_t index, uint16_t *value)
 {
     uint8_t cmd = MS5837_CMD_PROM_READ + (index * 2);
     uint8_t rx[2];
-    int err = write_cmd(cmd);
-    if (err) {
-        return err;
-    }
-
-    err = transport_read(ms5837_addr, rx, sizeof(rx));
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(write_cmd(cmd));
+    MS5837_RETURN_IF_ERR(transport_read(ms5837_addr, rx, sizeof(rx)));
 
     *value = ((uint16_t)rx[0] << 8) | rx[1];
     return 0;
@@ -422,23 +331,13 @@ static int read_prom_word(uint8_t index, uint16_t *value)
 static int read_adc(uint8_t convert_cmd, uint32_t *value)
 {
     uint8_t rx[3];
-    int err = write_cmd(convert_cmd | MS5837_OSR_8192);
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(write_cmd(convert_cmd | MS5837_OSR_8192));
 
     k_msleep(MS5837_CONV_DELAY_MS);
 
     uint8_t cmd = MS5837_CMD_ADC_READ;
-    err = write_cmd(cmd);
-    if (err) {
-        return err;
-    }
-
-    err = transport_read(ms5837_addr, rx, sizeof(rx));
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(write_cmd(cmd));
+    MS5837_RETURN_IF_ERR(transport_read(ms5837_addr, rx, sizeof(rx)));
 
     *value = ((uint32_t)rx[0] << 16) | ((uint32_t)rx[1] << 8) | rx[2];
     return 0;
@@ -483,14 +382,9 @@ static bool prom_has_coefficients(void)
     return any_nonzero && any_not_erased;
 }
 
-static void update_debug_fields(void)
+static void update_status_fields(void)
 {
     latest_sample.addr = ms5837_addr;
-    latest_sample.scl_idle = scl_idle_level;
-    latest_sample.sda_idle = sda_idle_level;
-    latest_sample.transport_error = transport_error_detail;
-    latest_sample.transport_mode = MS5837_TRANSPORT_MODE;
-    latest_sample.fw_depth_rev = MS5837_FW_DEPTH_REV;
     latest_sample.init_attempts = init_attempts;
     latest_sample.read_errors = read_errors;
 }
@@ -498,9 +392,23 @@ static void update_debug_fields(void)
 static void publish_status(int err, bool valid)
 {
     k_mutex_lock(&sample_mutex, K_FOREVER);
-    update_debug_fields();
+    update_status_fields();
     latest_sample.valid = valid;
     latest_sample.last_error = err;
+    k_mutex_unlock(&sample_mutex);
+}
+
+static void publish_sample(float pressure_mbar, float temperature_c, float depth_m)
+{
+    k_mutex_lock(&sample_mutex, K_FOREVER);
+    latest_sample.depth_m = depth_m;
+    latest_sample.pressure_mbar = pressure_mbar;
+    latest_sample.temperature_c = temperature_c;
+    latest_sample.valid = true;
+    latest_sample.last_error = 0;
+    update_status_fields();
+    last_sample_time = k_uptime_get();
+    latest_sample.age_ms = 0;
     k_mutex_unlock(&sample_mutex);
 }
 
@@ -515,7 +423,6 @@ int ms5837_init(void)
     init_attempts++;
     ms5837_addr = MS5837_ADDR;
     memset(prom, 0, sizeof(prom));
-    publish_status(-ENODEV, false);
 
     err = write_cmd(MS5837_CMD_RESET);
     if (err) {
@@ -534,7 +441,6 @@ int ms5837_init(void)
             publish_status(err, false);
             return err;
         }
-        publish_status(0, false);
     }
 
     err = read_prom_word(7, &prom[7]);
@@ -542,7 +448,6 @@ int ms5837_init(void)
         LOG_WRN("MS5837 optional PROM read 7 failed at 0x%02X: %d; continuing",
                 ms5837_addr, err);
         prom[7] = 0;
-        transport_error_detail = 0;
     }
 
     if (!prom_has_coefficients()) {
@@ -555,7 +460,6 @@ int ms5837_init(void)
     memcpy(crc_prom, prom, sizeof(crc_prom));
     uint8_t prom_crc_expected = prom[0] >> 12;
     uint8_t prom_crc_calculated = crc4(crc_prom);
-    publish_status(0, false);
     if (prom_crc_calculated != prom_crc_expected) {
         LOG_WRN("MS5837 PROM CRC mismatch at 0x%02X: calc=%u expected=%u",
                 ms5837_addr, prom_crc_calculated, prom_crc_expected);
@@ -572,15 +476,8 @@ static int read_compensated(float *pressure_mbar, float *temperature_c, float *d
 {
     uint32_t d1_pressure;
     uint32_t d2_temperature;
-    int err = read_adc(MS5837_CMD_CONVERT_D1, &d1_pressure);
-    if (err) {
-        return err;
-    }
-
-    err = read_adc(MS5837_CMD_CONVERT_D2, &d2_temperature);
-    if (err) {
-        return err;
-    }
+    MS5837_RETURN_IF_ERR(read_adc(MS5837_CMD_CONVERT_D1, &d1_pressure));
+    MS5837_RETURN_IF_ERR(read_adc(MS5837_CMD_CONVERT_D2, &d2_temperature));
 
     int32_t dT = (int32_t)d2_temperature - ((int32_t)prom[5] * 256);
     int32_t temp = 2000 + (int64_t)dT * prom[6] / 8388608LL;
@@ -674,13 +571,6 @@ void ms5837_task(void *p1, void *p2, void *p3)
         if (!initialized) {
             err = ms5837_init();
             if (err) {
-                k_mutex_lock(&sample_mutex, K_FOREVER);
-                update_debug_fields();
-                latest_sample.valid = false;
-                latest_sample.age_ms = -1;
-                latest_sample.last_error = err;
-                k_mutex_unlock(&sample_mutex);
-
                 LOG_ERR("MS5837 init failed: %d; retrying in %d s",
                         err, MS5837_INIT_RETRY_MS / 1000);
                 k_msleep(MS5837_INIT_RETRY_MS);
@@ -694,24 +584,11 @@ void ms5837_task(void *p1, void *p2, void *p3)
         float depth_m;
         err = read_compensated(&pressure_mbar, &temperature_c, &depth_m);
         if (!err && isfinite(pressure_mbar) && isfinite(temperature_c) && isfinite(depth_m)) {
-            k_mutex_lock(&sample_mutex, K_FOREVER);
-            latest_sample.depth_m = depth_m;
-            latest_sample.pressure_mbar = pressure_mbar;
-            latest_sample.temperature_c = temperature_c;
-            latest_sample.valid = true;
-            latest_sample.last_error = 0;
-            update_debug_fields();
-            last_sample_time = k_uptime_get();
-            latest_sample.age_ms = 0;
-            k_mutex_unlock(&sample_mutex);
+            publish_sample(pressure_mbar, temperature_c, depth_m);
         } else {
             read_errors++;
             LOG_ERR("MS5837 read failed: %d", err);
-            k_mutex_lock(&sample_mutex, K_FOREVER);
-            update_debug_fields();
-            latest_sample.valid = false;
-            latest_sample.last_error = err;
-            k_mutex_unlock(&sample_mutex);
+            publish_status(err, false);
             initialized = false;
         }
 
