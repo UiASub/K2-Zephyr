@@ -378,9 +378,6 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
             "\"pressure_mbar\":%.1f,\"temperature_c\":%.2f,"
             "\"valid\":%s,\"age_ms\":%lld,"
             "\"addr\":%u,\"last_error\":%d,"
-            "\"scl_idle\":%d,\"sda_idle\":%d,"
-            "\"transport_error\":%u,"
-            "\"transport_mode\":%u,\"fw_depth_rev\":%u,"
             "\"init_attempts\":%u,\"read_errors\":%u}}",
             (double)yaw, (double)pitch, (double)roll,
             (double)yr, (double)pr, (double)rr,
@@ -389,9 +386,6 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
             (double)depth.pressure_mbar, (double)depth.temperature_c,
             depth.valid ? "true" : "false", (long long)depth.age_ms,
             depth.addr, depth.last_error,
-            depth.scl_idle, depth.sda_idle,
-            depth.transport_error,
-            depth.transport_mode, depth.fw_depth_rev,
             depth.init_attempts, depth.read_errors);
 
         if (len > 0 && len < sizeof(buffer)) {
