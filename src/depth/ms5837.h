@@ -12,11 +12,6 @@ typedef struct {
     int64_t age_ms;
     uint8_t addr;
     int last_error;
-    int scl_idle;
-    int sda_idle;
-    uint32_t transport_error;
-    uint32_t transport_mode;
-    uint32_t fw_depth_rev;
     uint32_t init_attempts;
     uint32_t read_errors;
 } ms5837_sample_t;
