@@ -177,6 +177,14 @@ static int transport_init(void)
     return 0;
 }
 
+/* Force the next transport_init() to re-run the bus-clear sequence. Called
+ * after a failed transaction so a wedged slave (holding SDA low) gets the
+ * 9-clock unstick instead of the driver retrying forever on a stuck bus. */
+static void transport_request_reclear(void)
+{
+    bus_ready = false;
+}
+
 static int i2c_start_condition(void)
 {
     MS5837_RETURN_IF_ERR(release_sda());
@@ -571,6 +579,7 @@ void ms5837_task(void *p1, void *p2, void *p3)
         if (!initialized) {
             err = ms5837_init();
             if (err) {
+                transport_request_reclear();
                 LOG_ERR("MS5837 init failed: %d; retrying in %d s",
                         err, MS5837_INIT_RETRY_MS / 1000);
                 k_msleep(MS5837_INIT_RETRY_MS);
@@ -589,6 +598,7 @@ void ms5837_task(void *p1, void *p2, void *p3)
             read_errors++;
             LOG_ERR("MS5837 read failed: %d", err);
             publish_status(err, false);
+            transport_request_reclear();
             initialized = false;
         }
 
