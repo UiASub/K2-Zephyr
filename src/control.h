@@ -2,6 +2,7 @@
 
 #include <zephyr/kernel.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 /* Message structure for communication between threads */
 typedef struct {
@@ -24,6 +25,13 @@ typedef struct {
     float error[6];     /* setpoint - measurement (0 when passthrough) */
 } control_telemetry_t;
 
+typedef struct {
+    bool active;
+    float reference_yaw;
+    float reference_pitch;
+    float reference_roll;
+} frame_lock_state_t;
+
 /* Public functions */
 void rov_control_init(void);
 void rov_control_start(void);
@@ -40,3 +48,12 @@ void control_set_override(uint8_t axis_mask, const float setpoints[6]);
 
 /* Clear all overrides — return to normal stick control */
 void control_clear_override(void);
+
+/* Capture the current attitude as the reference frame for world-up heave. */
+void control_frame_lock_enable(void);
+
+/* Disable reference-frame compensation. */
+void control_frame_lock_disable(void);
+
+/* Copy the latest frame-lock state. */
+void control_get_frame_lock(frame_lock_state_t *out);

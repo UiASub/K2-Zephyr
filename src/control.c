@@ -1,6 +1,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <string.h>
+#include <math.h>
 #include "control.h"
 #include "pid/pid_controller.h"
 #include "pid/pid_config.h"
@@ -82,6 +83,11 @@ static uint8_t override_mask;           /* bitmask: bit 0=surge … bit 5=yaw */
 static float   override_setpoint[6];
 K_MUTEX_DEFINE(override_mutex);
 
+/* Reference-frame lock. When active, depth/heave PID output is interpreted as
+ * world-up and rotated into body-frame surge/sway/heave before thruster mixing. */
+static frame_lock_state_t frame_lock;
+K_MUTEX_DEFINE(frame_lock_mutex);
+
 /* ---------------------------------------------------------------------------
  * Helpers
  * --------------------------------------------------------------------------- */
@@ -119,6 +125,43 @@ static bool depth_sensor_read(float *depth_m)
     return true;
 }
 
+static void read_remapped_ypr(float *yaw, float *pitch, float *roll)
+{
+    float raw_yaw, raw_pitch, raw_roll;
+    vn100s_get_ypr(&raw_yaw, &raw_pitch, &raw_roll);
+    axis_config_remap_ypr(raw_yaw, raw_pitch, raw_roll, yaw, pitch, roll);
+}
+
+static void apply_locked_world_heave(float out[6], float heave_output,
+                                     float yaw_meas, float pitch_meas,
+                                     float roll_meas)
+{
+    ARG_UNUSED(yaw_meas);
+
+    frame_lock_state_t lock;
+    k_mutex_lock(&frame_lock_mutex, K_FOREVER);
+    lock = frame_lock;
+    k_mutex_unlock(&frame_lock_mutex);
+
+    if (!lock.active) {
+        return;
+    }
+
+    const float deg_to_rad = 0.017453293f;
+    float pitch = wrap_180(pitch_meas - lock.reference_pitch) * deg_to_rad;
+    float roll = wrap_180(roll_meas - lock.reference_roll) * deg_to_rad;
+    float sp = sinf(pitch);
+    float cp = cosf(pitch);
+    float sr = sinf(roll);
+    float cr = cosf(roll);
+
+    /* Match the existing control convention: positive pitch is nose-up, so a
+     * world-up correction includes positive surge when the ROV is pitched up. */
+    out[0] += heave_output * sp;
+    out[1] += heave_output * (-cp * sr);
+    out[2] = heave_output * cp * cr;
+}
+
 /* ---------------------------------------------------------------------------
  * Sync PID gains from the UDP-configurable store
  * --------------------------------------------------------------------------- */
@@ -142,14 +185,8 @@ static void stabilise(float out[6])
     float err_snap[6] = {0};
 
     /* ---- Read sensors ---- */
-    float raw_yaw, raw_pitch, raw_roll;
-    vn100s_get_ypr(&raw_yaw, &raw_pitch, &raw_roll);
-
-    /* Apply axis remapping (configured from topside) so PID sees the
-     * correct orientation even if the IMU is mounted non-standard. */
     float yaw_meas, pitch_meas, roll_meas;
-    axis_config_remap_ypr(raw_yaw, raw_pitch, raw_roll,
-                          &yaw_meas, &pitch_meas, &roll_meas);
+    read_remapped_ypr(&yaw_meas, &pitch_meas, &roll_meas);
 
     float raw_ax, raw_ay, raw_az;
     vn100s_get_accel(&raw_ax, &raw_ay, &raw_az);
@@ -184,6 +221,7 @@ static void stabilise(float out[6])
 
     float depth_meas;
     bool  depth_valid = depth_sensor_read(&depth_meas);
+    bool  transform_world_heave = false;
 
     /* ---- Grab pilot stick snapshot ---- */
     int8_t p_surge, p_sway, p_heave, p_roll, p_pitch, p_yaw;
@@ -354,6 +392,7 @@ static void stabilise(float out[6])
         depth_setpoint = -ovr_sp[PID_HEAVE];
         out[2] = pid_compute(&pid[PID_HEAVE], depth_setpoint, -depth_meas, CONTROL_DT);
         sp_snap[2] = -depth_setpoint;  err_snap[2] = sp_snap[2] - depth_meas;
+        transform_world_heave = true;
     } else if (pid_is_disabled(&pid[PID_HEAVE])) {
         out[2] = stick_normalize(p_heave);
         depth_setpoint = -depth_meas;
@@ -363,6 +402,11 @@ static void stabilise(float out[6])
         depth_setpoint += stick_normalize(p_heave) * MAX_DEPTH_RATE_MPS * CONTROL_DT;
         out[2] = pid_compute(&pid[PID_HEAVE], depth_setpoint, -depth_meas, CONTROL_DT);
         sp_snap[2] = -depth_setpoint;  err_snap[2] = sp_snap[2] - depth_meas;
+        transform_world_heave = true;
+    }
+
+    if (transform_world_heave) {
+        apply_locked_world_heave(out, out[2], yaw_meas, pitch_meas, roll_meas);
     }
 
     /* Publish telemetry snapshot */
@@ -533,6 +577,12 @@ void rov_control_init(void)
     for (int i = 0; i < 2; i++) est_speed[i] = 0.0f;
     depth_setpoint = 0.0f;
     depth_was_valid = false;
+    k_mutex_lock(&frame_lock_mutex, K_FOREVER);
+    frame_lock.active = false;
+    frame_lock.reference_yaw = 0.0f;
+    frame_lock.reference_pitch = 0.0f;
+    frame_lock.reference_roll = 0.0f;
+    k_mutex_unlock(&frame_lock_mutex);
     last_cmd_time = 0;
 
     LOG_INF("ROV control system initialized (50 Hz, PID stabilisation)");
@@ -575,6 +625,37 @@ void control_clear_override(void)
     override_mask = 0;
     k_mutex_unlock(&override_mutex);
     LOG_INF("Setpoint override cleared");
+}
+
+void control_frame_lock_enable(void)
+{
+    float yaw, pitch, roll;
+    read_remapped_ypr(&yaw, &pitch, &roll);
+
+    k_mutex_lock(&frame_lock_mutex, K_FOREVER);
+    frame_lock.active = true;
+    frame_lock.reference_yaw = yaw;
+    frame_lock.reference_pitch = pitch;
+    frame_lock.reference_roll = roll;
+    k_mutex_unlock(&frame_lock_mutex);
+
+    LOG_INF("Frame lock enabled: yaw=%d pitch=%d roll=%d",
+            (int)yaw, (int)pitch, (int)roll);
+}
+
+void control_frame_lock_disable(void)
+{
+    k_mutex_lock(&frame_lock_mutex, K_FOREVER);
+    frame_lock.active = false;
+    k_mutex_unlock(&frame_lock_mutex);
+    LOG_INF("Frame lock disabled");
+}
+
+void control_get_frame_lock(frame_lock_state_t *out)
+{
+    k_mutex_lock(&frame_lock_mutex, K_FOREVER);
+    *out = frame_lock;
+    k_mutex_unlock(&frame_lock_mutex);
 }
 
 void rov_send_command(uint32_t sequence, uint64_t payload)

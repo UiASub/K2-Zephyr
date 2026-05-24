@@ -335,6 +335,7 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
     float ax, ay, az;
     ms5837_sample_t depth;
     control_telemetry_t ctrl_telem;
+    frame_lock_state_t frame_lock;
 
     while (!network_ready) {
         k_sleep(K_MSEC(100));
@@ -369,6 +370,7 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
         vn100s_get_accel(&ax, &ay, &az);
         ms5837_get_sample(&depth);
         control_get_telemetry(&ctrl_telem);
+        control_get_frame_lock(&frame_lock);
 
         int len = snprintf(buffer, sizeof(buffer),
             "{\"imu\":{\"yaw\":%.2f,\"pitch\":%.2f,\"roll\":%.2f,"
@@ -378,7 +380,8 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
             "\"pressure_mbar\":%.1f,\"temperature_c\":%.2f,"
             "\"valid\":%s,\"age_ms\":%lld,"
             "\"addr\":%u,\"last_error\":%d,"
-            "\"init_attempts\":%u,\"read_errors\":%u}}",
+            "\"init_attempts\":%u,\"read_errors\":%u},"
+            "\"frame\":{\"locked\":%s,\"yaw\":%.2f,\"pitch\":%.2f,\"roll\":%.2f}}",
             (double)yaw, (double)pitch, (double)roll,
             (double)yr, (double)pr, (double)rr,
             (double)ax, (double)ay, (double)az,
@@ -386,7 +389,11 @@ void sensor_sender_thread(void *arg1, void *arg2, void *arg3)
             (double)depth.pressure_mbar, (double)depth.temperature_c,
             depth.valid ? "true" : "false", (long long)depth.age_ms,
             depth.addr, depth.last_error,
-            depth.init_attempts, depth.read_errors);
+            depth.init_attempts, depth.read_errors,
+            frame_lock.active ? "true" : "false",
+            (double)frame_lock.reference_yaw,
+            (double)frame_lock.reference_pitch,
+            (double)frame_lock.reference_roll);
 
         if (len > 0 && len < sizeof(buffer)) {
             ret = zsock_sendto(sock, buffer, len, 0,
