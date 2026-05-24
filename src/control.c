@@ -329,6 +329,7 @@ static void stabilise(float out[6])
     /* Heave — negate measurement: positive depth = deeper, thruster positive = up.
      *
      * Sign convention: depth_setpoint is *altitude* (negative of target depth).
+     * Protocol/telemetry setpoints stay positive-down depth in metres.
      * Pilot stick up (positive) raises altitude (= shallower).
      *
      * If the depth sensor is offline or stale, the closed-loop branches would
@@ -348,20 +349,20 @@ static void stabilise(float out[6])
         pid_reset(&pid[PID_HEAVE]);
         out[2] = stick_normalize(p_heave);
         depth_was_valid = true;
-        sp_snap[2] = out[2];  err_snap[2] = 0.0f;
+        sp_snap[2] = depth_meas;  err_snap[2] = 0.0f;
     } else if (ovr_mask & (1 << PID_HEAVE)) {
-        depth_setpoint = ovr_sp[PID_HEAVE];
+        depth_setpoint = -ovr_sp[PID_HEAVE];
         out[2] = pid_compute(&pid[PID_HEAVE], depth_setpoint, -depth_meas, CONTROL_DT);
-        sp_snap[2] = depth_setpoint;  err_snap[2] = depth_setpoint - (-depth_meas);
+        sp_snap[2] = -depth_setpoint;  err_snap[2] = sp_snap[2] - depth_meas;
     } else if (pid_is_disabled(&pid[PID_HEAVE])) {
         out[2] = stick_normalize(p_heave);
         depth_setpoint = -depth_meas;
         pid_reset(&pid[PID_HEAVE]);
-        sp_snap[2] = out[2];  err_snap[2] = 0.0f;
+        sp_snap[2] = depth_meas;  err_snap[2] = 0.0f;
     } else {
         depth_setpoint += stick_normalize(p_heave) * MAX_DEPTH_RATE_MPS * CONTROL_DT;
         out[2] = pid_compute(&pid[PID_HEAVE], depth_setpoint, -depth_meas, CONTROL_DT);
-        sp_snap[2] = depth_setpoint;  err_snap[2] = depth_setpoint - (-depth_meas);
+        sp_snap[2] = -depth_setpoint;  err_snap[2] = sp_snap[2] - depth_meas;
     }
 
     /* Publish telemetry snapshot */
