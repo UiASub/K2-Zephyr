@@ -18,6 +18,7 @@
 #define LOG_UDP_PORT       5006
 #define SETPOINT_OVR_PORT  5007
 #define SYSTEM_CONTROL_PORT 5008
+#define FRAME_CONTROL_PORT  5009
 
 extern bool network_ready;
 extern int udp_sock;

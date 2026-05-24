@@ -29,6 +29,7 @@
 #include "net/control_telemetry.h"
 #include "net/setpoint_override.h"
 #include "net/system_control.h"
+#include "net/frame_control.h"
 #include "net/ota_confirm.h"
 
 /* Defined in net/log_backend_udp.c */
@@ -94,6 +95,9 @@ int main(void)
 
     // Start system control listener
     system_control_start();
+
+    // Start frame control listener
+    frame_control_start();
 
     // Confirm a trial MCUboot image only after the app and network come up
     ota_confirm_init();
