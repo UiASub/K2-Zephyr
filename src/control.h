@@ -6,6 +6,7 @@
 /* Message structure for communication between threads */
 typedef struct {
     uint32_t sequence;
+    uint8_t flags;
     int8_t surge;        /* Forward/backward (-128 to +127) */
     int8_t sway;         /* Left/right (-128 to +127) */
     int8_t heave;        /* Up/down (-128 to +127) */
@@ -27,7 +28,7 @@ typedef struct {
 /* Public functions */
 void rov_control_init(void);
 void rov_control_start(void);
-void rov_send_command(uint32_t sequence, uint64_t payload);
+void rov_send_command(uint32_t sequence, uint64_t payload, uint8_t flags);
 
 /* Copy the latest control telemetry snapshot (thread-safe) */
 void control_get_telemetry(control_telemetry_t *out);

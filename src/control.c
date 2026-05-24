@@ -1,6 +1,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <string.h>
+#include <math.h>
 #include "control.h"
 #include "pid/pid_controller.h"
 #include "pid/pid_config.h"
@@ -25,6 +26,7 @@ LOG_MODULE_REGISTER(rov_control, LOG_LEVEL_INF);
 #define PID_OUTPUT_LIMIT    1.0f     /* PID output range ±1.0 (maps to ±50% via mixing) */
 #define SPEED_DECAY         0.995f   /* leaky integrator factor for accel→speed */
 #define LOG_INTERVAL        50       /* log every 50 iterations = 1 s */
+#define COMMAND_FLAG_GLOBAL_FRAME 0x01
 
 /* ---------------------------------------------------------------------------
  * Thread / queue
@@ -46,6 +48,7 @@ static struct {
     int8_t yaw;
     uint8_t light;
     uint8_t manipulator;
+    uint8_t flags;
 } pilot = {0};
 
 K_MUTEX_DEFINE(pilot_mutex);
@@ -98,6 +101,43 @@ static float wrap_180(float angle)
 static inline float stick_normalize(int8_t v)
 {
     return (float)v / 127.0f;
+}
+
+static void apply_reference_frame_matrix(const float in[6], float out[6], uint8_t flags, float yaw_deg)
+{
+    float src[6];
+    float matrix[6][6] = {
+        {1, 0, 0, 0, 0, 0},
+        {0, 1, 0, 0, 0, 0},
+        {0, 0, 1, 0, 0, 0},
+        {0, 0, 0, 1, 0, 0},
+        {0, 0, 0, 0, 1, 0},
+        {0, 0, 0, 0, 0, 1},
+    };
+
+    memcpy(src, in, sizeof(src));
+
+    if (flags & COMMAND_FLAG_GLOBAL_FRAME) {
+        const float deg_to_rad = 0.017453293f;
+        float yaw = yaw_deg * deg_to_rad;
+        float c = cosf(yaw);
+        float s = sinf(yaw);
+
+        /* Transform horizontal global stick intent into the ROV body frame.
+         * The remaining axes are already expressed in the ROV frame. */
+        matrix[0][0] = c;
+        matrix[0][1] = s;
+        matrix[1][0] = -s;
+        matrix[1][1] = c;
+    }
+
+    for (int row = 0; row < 6; row++) {
+        float sum = 0.0f;
+        for (int col = 0; col < 6; col++) {
+            sum += matrix[row][col] * src[col];
+        }
+        out[row] = sum;
+    }
 }
 
 /* Maximum age (ms) for a depth sample to still count as fresh for PID use.
@@ -187,6 +227,7 @@ static void stabilise(float out[6])
 
     /* ---- Grab pilot stick snapshot ---- */
     int8_t p_surge, p_sway, p_heave, p_roll, p_pitch, p_yaw;
+    uint8_t p_flags;
     k_mutex_lock(&pilot_mutex, K_FOREVER);
     p_surge = pilot.surge;
     p_sway  = pilot.sway;
@@ -194,6 +235,7 @@ static void stabilise(float out[6])
     p_roll  = pilot.roll;
     p_pitch = pilot.pitch;
     p_yaw   = pilot.yaw;
+    p_flags = pilot.flags;
     k_mutex_unlock(&pilot_mutex);
 
     /* ---- Grab setpoint override snapshot ---- */
@@ -365,6 +407,8 @@ static void stabilise(float out[6])
         sp_snap[2] = -depth_setpoint;  err_snap[2] = sp_snap[2] - depth_meas;
     }
 
+    apply_reference_frame_matrix(out, out, p_flags, yaw_meas);
+
     /* Publish telemetry snapshot */
     k_mutex_lock(&ctrl_telem_mutex, K_FOREVER);
     memcpy(ctrl_telem.setpoint, sp_snap, sizeof(sp_snap));
@@ -417,6 +461,7 @@ static void rov_control_thread(void *arg1, void *arg2, void *arg3)
             pilot.yaw         = command.yaw;
             pilot.light       = command.light;
             pilot.manipulator = command.manipulator;
+            pilot.flags       = command.flags;
             k_mutex_unlock(&pilot_mutex);
 
             last_cmd_time = k_uptime_get();
@@ -577,11 +622,12 @@ void control_clear_override(void)
     LOG_INF("Setpoint override cleared");
 }
 
-void rov_send_command(uint32_t sequence, uint64_t payload)
+void rov_send_command(uint32_t sequence, uint64_t payload, uint8_t flags)
 {
     rov_command_t command;
 
     command.sequence    = sequence;
+    command.flags       = flags;
     command.surge       = (int8_t)((payload >> 0)  & 0xFF) - 128;
     command.sway        = (int8_t)((payload >> 8)  & 0xFF) - 128;
     command.heave       = (int8_t)((payload >> 16) & 0xFF) - 128;

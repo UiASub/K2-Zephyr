@@ -29,6 +29,14 @@ typedef struct {
     uint32_t crc32;     // CRC32 checksum
 } __attribute__((packed)) udp_packet_t;
 
+typedef struct {
+    uint32_t sequence;  // Sequence number
+    uint64_t payload;   // Payload data
+    uint8_t flags;      // Command flags
+    uint8_t reserved[3];
+    uint32_t crc32;     // CRC32 checksum
+} __attribute__((packed)) udp_packet_ext_t;
+
 /* Use addresses from net.h */
 #define STATIC_IP_ADDR STATIC_DEVICE_IP
 
@@ -264,7 +272,7 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
     struct sockaddr_in bind_addr, client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
     
-    udp_packet_t packet;
+    uint8_t rx_buffer[sizeof(udp_packet_ext_t)];
     int ret;
 
     while (!network_ready) {
@@ -292,19 +300,34 @@ void udp_server_thread(void *arg1, void *arg2, void *arg3)
     LOG_INF("UDP server ready on port %d", UDP_COMMAND_PORT);
 
     while (1) {
-        ret = zsock_recvfrom(udp_sock, &packet, sizeof(packet), 0,
+        ret = zsock_recvfrom(udp_sock, rx_buffer, sizeof(rx_buffer), 0,
                              (struct sockaddr *)&client_addr, &client_addr_len);
 
-        if (ret == sizeof(udp_packet_t)) {
-            uint32_t recv_sequence = ntohl(packet.sequence);
-            uint64_t recv_payload = net_to_host_64(packet.payload);
-            uint32_t recv_crc = ntohl(packet.crc32);
+        if (ret == sizeof(udp_packet_t) || ret == sizeof(udp_packet_ext_t)) {
+            uint32_t recv_sequence;
+            uint64_t recv_payload;
+            uint32_t recv_crc;
+            uint8_t recv_flags = 0;
+
+            if (ret == sizeof(udp_packet_t)) {
+                udp_packet_t packet;
+                memcpy(&packet, rx_buffer, sizeof(packet));
+                recv_sequence = ntohl(packet.sequence);
+                recv_payload = net_to_host_64(packet.payload);
+                recv_crc = ntohl(packet.crc32);
+            } else {
+                udp_packet_ext_t packet;
+                memcpy(&packet, rx_buffer, sizeof(packet));
+                recv_sequence = ntohl(packet.sequence);
+                recv_payload = net_to_host_64(packet.payload);
+                recv_flags = packet.flags;
+                recv_crc = ntohl(packet.crc32);
+            }
             
-            uint32_t calculated_crc = crc32_calc(&packet,
-                sizeof(packet.sequence) + sizeof(packet.payload));
+            uint32_t calculated_crc = crc32_calc(rx_buffer, ret - sizeof(uint32_t));
 
             if (calculated_crc == recv_crc) {
-                rov_send_command(recv_sequence, recv_payload);
+                rov_send_command(recv_sequence, recv_payload, recv_flags);
                 resource_monitor_inc_udp_rx();
             } else {
                 LOG_WRN("CRC mismatch: calc 0x%08X, recv 0x%08X",
