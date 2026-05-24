@@ -8,6 +8,7 @@
 #include "imu/vn100s.h"
 #include "depth/ms5837.h"
 #include "vesc/thruster_mapping.h"
+#include <stdbool.h>
 #include "vesc/vesc_uart_zephyr.h"
 
 LOG_MODULE_REGISTER(rov_control, LOG_LEVEL_INF);
@@ -63,8 +64,14 @@ static float angle_setpoint[3];          /* [0]=roll [1]=pitch [2]=yaw */
 /* Estimated speed for surge / sway (m/s, integrated from accelerometer) */
 static float est_speed[2];               /* [0]=surge(x) [1]=sway(y) */
 
-/* Depth setpoint (m, integrated from stick) */
+/* Depth setpoint (m, integrated from stick) — stored as altitude (negative of
+ * target depth) to match the PID measurement sign in the heave block. */
 static float depth_setpoint;
+
+/* Tracks whether the previous tick saw a valid depth sample. Used to resync
+ * depth_setpoint to current altitude on invalid→valid transitions so the PID
+ * doesn't snap-correct to a stale setpoint. */
+static bool depth_was_valid;
 
 /* Control telemetry snapshot — written by control loop, read by sender thread */
 static control_telemetry_t ctrl_telem;
@@ -93,10 +100,23 @@ static inline float stick_normalize(int8_t v)
     return (float)v / 127.0f;
 }
 
-/* Read depth sensor. Returns 0 until the MS5837 has produced a valid sample. */
-static float depth_sensor_read(void)
+/* Maximum age (ms) for a depth sample to still count as fresh for PID use.
+ * MS5837 publishes every ~500 ms; allow a couple of missed cycles before we
+ * declare the sensor stale and bail out of closed-loop depth control. */
+#define DEPTH_SAMPLE_MAX_AGE_MS  1500
+
+/* Read depth sensor with validity flag. Returns true only when the MS5837 has
+ * published a valid, recent sample. Out-param holds depth in metres (>=0). */
+static bool depth_sensor_read(float *depth_m)
 {
-    return ms5837_get_depth_m();
+    ms5837_sample_t s;
+    ms5837_get_sample(&s);
+    if (!s.valid || s.age_ms < 0 || s.age_ms > DEPTH_SAMPLE_MAX_AGE_MS) {
+        *depth_m = 0.0f;
+        return false;
+    }
+    *depth_m = s.depth_m;
+    return true;
 }
 
 /* ---------------------------------------------------------------------------
@@ -162,7 +182,8 @@ static void stabilise(float out[6])
         az -= (rr_rad * rr_rad + pr_rad * pr_rad) * rz;
     }
 
-    float depth_meas = depth_sensor_read();
+    float depth_meas;
+    bool  depth_valid = depth_sensor_read(&depth_meas);
 
     /* ---- Grab pilot stick snapshot ---- */
     int8_t p_surge, p_sway, p_heave, p_roll, p_pitch, p_yaw;
@@ -298,27 +319,50 @@ static void stabilise(float out[6])
     }
 
     /* ================================================================
-     *  HEAVE  —  depth-tracking PID (stub sensor for now)
+     *  HEAVE  —  depth-tracking PID (MS5837 bitbang-I2C depth sensor)
      *
      *  Stick → depth rate → integrate → depth setpoint
      *  PID(depth_error) → output
-     *  Bypass if gains == 0: passthrough raw stick
+     *  Bypass if gains == 0 or sensor invalid: passthrough raw stick
      * ================================================================ */
 
-    /* Heave — negate measurement: positive depth = deeper, thruster positive = up */
-    if (ovr_mask & (1 << PID_HEAVE)) {
-        depth_setpoint = ovr_sp[PID_HEAVE];
+    /* Heave — negate measurement: positive depth = deeper, thruster positive = up.
+     *
+     * Sign convention: depth_setpoint is *altitude* (negative of target depth).
+     * Protocol/telemetry setpoints stay positive-down depth in metres.
+     * Pilot stick up (positive) raises altitude (= shallower).
+     *
+     * If the depth sensor is offline or stale, the closed-loop branches would
+     * be flying blind, so we fall back to direct stick passthrough. We also
+     * reset the PID; the setpoint will be resynced to current altitude on the
+     * next tick when the sensor reports a valid sample (handled below). */
+    if (!depth_valid) {
+        out[2] = stick_normalize(p_heave);
+        pid_reset(&pid[PID_HEAVE]);
+        depth_was_valid = false;
+        sp_snap[2] = out[2];  err_snap[2] = 0.0f;
+    } else if (!depth_was_valid) {
+        /* Sensor just recovered — resync setpoint to current altitude so we
+         * don't immediately fight to a stale target. Treat this tick as a
+         * passthrough so the operator stays in control. */
+        depth_setpoint = -depth_meas;
+        pid_reset(&pid[PID_HEAVE]);
+        out[2] = stick_normalize(p_heave);
+        depth_was_valid = true;
+        sp_snap[2] = depth_meas;  err_snap[2] = 0.0f;
+    } else if (ovr_mask & (1 << PID_HEAVE)) {
+        depth_setpoint = -ovr_sp[PID_HEAVE];
         out[2] = pid_compute(&pid[PID_HEAVE], depth_setpoint, -depth_meas, CONTROL_DT);
-        sp_snap[2] = depth_setpoint;  err_snap[2] = depth_setpoint - (-depth_meas);
+        sp_snap[2] = -depth_setpoint;  err_snap[2] = sp_snap[2] - depth_meas;
     } else if (pid_is_disabled(&pid[PID_HEAVE])) {
         out[2] = stick_normalize(p_heave);
         depth_setpoint = -depth_meas;
         pid_reset(&pid[PID_HEAVE]);
-        sp_snap[2] = out[2];  err_snap[2] = 0.0f;
+        sp_snap[2] = depth_meas;  err_snap[2] = 0.0f;
     } else {
         depth_setpoint += stick_normalize(p_heave) * MAX_DEPTH_RATE_MPS * CONTROL_DT;
         out[2] = pid_compute(&pid[PID_HEAVE], depth_setpoint, -depth_meas, CONTROL_DT);
-        sp_snap[2] = depth_setpoint;  err_snap[2] = depth_setpoint - (-depth_meas);
+        sp_snap[2] = -depth_setpoint;  err_snap[2] = sp_snap[2] - depth_meas;
     }
 
     /* Publish telemetry snapshot */
@@ -420,6 +464,15 @@ static void rov_control_thread(void *arg1, void *arg2, void *arg3)
                         (int)(est_speed[0] * 1000),
                         (int)(est_speed[1] * 1000));
 
+                /* Depth state — sp/meas in cm, plus sensor validity flag */
+                ms5837_sample_t depth_dbg;
+                ms5837_get_sample(&depth_dbg);
+                LOG_INF("Dpt sp:%dcm meas:%dcm valid:%d age:%lldms",
+                        (int)(depth_setpoint * 100),
+                        (int)(depth_dbg.depth_m * 100),
+                        (int)depth_dbg.valid,
+                        (long long)depth_dbg.age_ms);
+
                 /* Show active override setpoints so topside can verify them */
                 k_mutex_lock(&override_mutex, K_FOREVER);
                 uint8_t log_ovr_mask = override_mask;
@@ -479,6 +532,7 @@ void rov_control_init(void)
     for (int i = 0; i < 3; i++) angle_setpoint[i] = 0.0f;
     for (int i = 0; i < 2; i++) est_speed[i] = 0.0f;
     depth_setpoint = 0.0f;
+    depth_was_valid = false;
     last_cmd_time = 0;
 
     LOG_INF("ROV control system initialized (50 Hz, PID stabilisation)");
