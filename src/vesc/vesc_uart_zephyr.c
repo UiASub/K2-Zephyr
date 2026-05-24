@@ -35,9 +35,7 @@ static void uart_isr_callback(const struct device *dev, void *user_data)
 {
     ARG_UNUSED(user_data);
 
-    if (!uart_irq_update(dev)) {
-        return;
-    }
+    uart_irq_update(dev);
 
     if (uart_irq_tx_ready(dev)) {
         uint16_t head = tx_head;
