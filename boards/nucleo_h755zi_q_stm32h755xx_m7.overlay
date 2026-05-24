@@ -1,19 +1,11 @@
 #include "nucleo_h755zi_q_stm32h755xx_m7_partitions.overlay"
 
-/* Enable USART6 for VESC communication
- * TX = PC6 (D1 on CN10 pin 2)
- * RX = PC7 (D0 on CN10 pin 1)
- */
-&usart6 {
-    status = "okay";
-    pinctrl-0 = <&usart6_tx_pc6 &usart6_rx_pc7>;
-    pinctrl-names = "default";
-    current-speed = <115200>;
-};
-
 / {
     aliases {
-        vesc-uart = &usart6;
+        /* Arduino D1/D0 on nucleo_h755zi_q are LPUART1 TX/RX:
+         * TX = PB6 (D1), RX = PB7 (D0).
+         */
+        vesc-uart = &lpuart1;
         vn100s = &vn100s;
     };
 };
