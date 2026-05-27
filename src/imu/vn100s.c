@@ -194,6 +194,13 @@ void vn100s_get_accel(float *ax, float *ay, float *az)
     *az = last_az;
 }
 
+bool vn100s_has_recent_sample(int64_t max_age_ms)
+{
+    int64_t sample_time = last_sample_time;
+
+    return sample_time != 0 && (k_uptime_get() - sample_time) <= max_age_ms;
+}
+
 /* Thread entry */
 
 void vn100s_task(void *p1, void *p2, void *p3)

@@ -18,9 +18,13 @@ LOG_MODULE_REGISTER(oled, LOG_LEVEL_INF);
 
 #define OLED_THREAD_STACK_SIZE 2048
 #define OLED_THREAD_PRIORITY 6
+#define OLED_WIDTH_PIXELS 128
 #define OLED_REFRESH_MS 200
 #define OLED_LINE_MAX 32
+#define OLED_MAX_FAULTS 4
+#define OLED_FAULT_SCROLL_MS 1500
 #define OLED_BUTTON_DEBOUNCE_MS 250
+#define OLED_IMU_STALE_MS 1000
 
 #define OLED_NODE DT_CHOSEN(zephyr_display)
 #define OLED_BUTTON_NODE DT_ALIAS(sw0)
@@ -33,8 +37,13 @@ BUILD_ASSERT(DT_NODE_HAS_STATUS(OLED_BUTTON_NODE, okay),
 enum oled_mode {
 	OLED_MODE_IMU,
 	OLED_MODE_NET,
+	OLED_MODE_FAULTS,
 	OLED_MODE_BMS,
 	OLED_MODE_COUNT,
+};
+
+struct fault_line {
+	const char *text;
 };
 
 static const struct device *const oled_dev = DEVICE_DT_GET(OLED_NODE);
@@ -46,6 +55,8 @@ static K_MUTEX_DEFINE(oled_lock);
 static atomic_t oled_mode = ATOMIC_INIT(OLED_MODE_IMU);
 
 static bool oled_ready;
+static bool mode_button_ready;
+static uint8_t chars_per_line = 16;
 static uint8_t line_height = 16;
 
 static void button_pressed(const struct device *dev,
@@ -122,11 +133,130 @@ static int select_font(void)
 			}
 
 			line_height = MAX(font_height, 8);
+			if (font_width > 0) {
+				chars_per_line = MIN(MAX(OLED_WIDTH_PIXELS / font_width, 1),
+						     OLED_LINE_MAX - 1);
+			}
 			return 0;
 		}
 	}
 
 	return -ENOENT;
+}
+
+static size_t fault_text_len(const char *text)
+{
+	return text ? strlen(text) : 0;
+}
+
+static void copy_fault_chunk(char *dst, size_t dst_len, const char *text,
+			     size_t offset)
+{
+	size_t len;
+
+	if (!text || dst_len == 0) {
+		return;
+	}
+
+	len = MIN(fault_text_len(text + offset), MIN((size_t)chars_per_line, dst_len - 1));
+	memcpy(dst, text + offset, len);
+	dst[len] = '\0';
+}
+
+static size_t fault_line_count(const char *text)
+{
+	size_t len = fault_text_len(text);
+
+	if (len == 0) {
+		return 1;
+	}
+
+	return (len + chars_per_line - 1) / chars_per_line;
+}
+
+static size_t collect_faults(struct fault_line *faults, size_t max_faults)
+{
+	size_t count = 0;
+
+	if (!vn100s_has_recent_sample(OLED_IMU_STALE_MS) && count < max_faults) {
+		faults[count++].text = "IMU stale/no valid sample";
+	}
+
+	if (!network_ready && count < max_faults) {
+		faults[count++].text = "Network not ready";
+	}
+
+	if (!mode_button_ready && count < max_faults) {
+		faults[count++].text = "Mode button disabled";
+	}
+
+	return count;
+}
+
+static size_t total_fault_lines(const struct fault_line *faults, size_t fault_count)
+{
+	size_t count = 0;
+
+	for (size_t i = 0; i < fault_count; i++) {
+		count += fault_line_count(faults[i].text);
+	}
+
+	return count;
+}
+
+static void get_fault_display_line(const struct fault_line *faults,
+				   size_t fault_count,
+				   size_t display_line,
+				   char *dst,
+				   size_t dst_len)
+{
+	if (dst_len == 0) {
+		return;
+	}
+
+	dst[0] = '\0';
+
+	for (size_t fault_idx = 0; fault_idx < fault_count; fault_idx++) {
+		size_t lines = fault_line_count(faults[fault_idx].text);
+
+		if (display_line < lines) {
+			copy_fault_chunk(dst, dst_len, faults[fault_idx].text,
+					 display_line * chars_per_line);
+			return;
+		}
+
+		display_line -= lines;
+	}
+}
+
+static void format_fault_page(char *line1, size_t line1_len,
+			      char *line2, size_t line2_len)
+{
+	struct fault_line faults[OLED_MAX_FAULTS];
+	size_t fault_count = collect_faults(faults, ARRAY_SIZE(faults));
+	size_t line_count;
+	size_t scroll_line;
+
+	if (fault_count == 0) {
+		snprintf(line1, line1_len, "Faults");
+		snprintf(line2, line2_len, "none");
+		return;
+	}
+
+	line_count = total_fault_lines(faults, fault_count);
+	scroll_line = 0;
+	if (line_count > 2) {
+		scroll_line = (k_uptime_get() / OLED_FAULT_SCROLL_MS) % line_count;
+	}
+
+	get_fault_display_line(faults, fault_count, scroll_line, line1, line1_len);
+	if (line_count > 1) {
+		get_fault_display_line(faults, fault_count,
+				       (scroll_line + 1) % line_count,
+				       line2, line2_len);
+	} else if (line2_len > 0) {
+		line2[0] = '\0';
+	}
 }
 
 static int oled_init(void)
@@ -223,6 +353,9 @@ static void oled_thread(void *arg1, void *arg2, void *arg3)
 	ret = button_init();
 	if (ret < 0) {
 		LOG_WRN("OLED mode button disabled: %d", ret);
+		mode_button_ready = false;
+	} else {
+		mode_button_ready = true;
 	}
 
 	while (1) {
@@ -236,6 +369,9 @@ static void oled_thread(void *arg1, void *arg2, void *arg3)
 		case OLED_MODE_NET:
 			snprintf(line1, sizeof(line1), "IP %s", STATIC_DEVICE_IP);
 			snprintf(line2, sizeof(line2), "Top %s", TOPSIDE_IP);
+			break;
+		case OLED_MODE_FAULTS:
+			format_fault_page(line1, sizeof(line1), line2, sizeof(line2));
 			break;
 		case OLED_MODE_BMS:
 			snprintf(line1, sizeof(line1), "BMS");

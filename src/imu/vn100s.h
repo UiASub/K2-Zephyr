@@ -2,6 +2,7 @@
 #define VN100S_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/spi.h>
 
@@ -19,6 +20,9 @@ void vn100s_get_rates(float *yaw_rate, float *pitch_rate, float *roll_rate);
 
 /* Get latest linear acceleration (m/s^2) */
 void vn100s_get_accel(float *ax, float *ay, float *az);
+
+/* True when a valid sample was received within max_age_ms. */
+bool vn100s_has_recent_sample(int64_t max_age_ms);
 
 /* Thread entry for the IMU task */
 void vn100s_task(void *p1, void *p2, void *p3);
