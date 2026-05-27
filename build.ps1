@@ -1,12 +1,23 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$workspace = Join-Path -Path $HOME -ChildPath 'zephyrproject'
+$projectPath = $PSScriptRoot
+if (-not $projectPath) {
+    $projectPath = (Get-Location).Path
+}
+
+$workspace = Split-Path -Parent $projectPath
 $venvActivate = Join-Path -Path $workspace -ChildPath '.venv\Scripts\Activate.ps1'
-$projectPath = Join-Path -Path $workspace -ChildPath 'K2-Zephyr'
 $board = 'nucleo_h755zi_q/stm32h755xx/m7'
 $boardLabel = 'H7 (nucleo_h755zi_q/stm32h755xx/m7)'
 $otaBuild = $false
+
+function Invoke-West {
+    & west @args
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+}
 
 foreach ($arg in $args) {
     switch ($arg.ToLowerInvariant()) {
@@ -37,7 +48,7 @@ foreach ($arg in $args) {
 if (Test-Path $venvActivate) {
     & $venvActivate
 } elseif (-not (Get-Command west -ErrorAction SilentlyContinue)) {
-    Write-Host "west not found. Install west or create $workspace\.venv."
+    Write-Host "west not found. Install west or create a Zephyr virtual environment at $workspace\.venv."
     exit 1
 }
 
@@ -45,10 +56,10 @@ Set-Location $projectPath
 if ($otaBuild) {
     $buildDir = if ($board -eq 'nucleo_f767zi') { 'build-f767-ota' } else { 'build-h755-ota' }
     Write-Host "Building K2-Zephyr OTA image for $boardLabel..."
-    west build --sysbuild -p -b $board -d $buildDir . -- "-DEXTRA_CONF_FILE=ota.conf"
+    Invoke-West build --sysbuild -p -b $board -d $buildDir . -- "-DEXTRA_CONF_FILE=ota.conf"
     Write-Host "OTA build complete for $boardLabel! Flash with: west flash -d $buildDir"
 } else {
     Write-Host "Building K2-Zephyr for $boardLabel..."
-    west build -p -b $board
+    Invoke-West build -p -b $board
     Write-Host "Build complete for $boardLabel! Flash with: west flash"
 }
