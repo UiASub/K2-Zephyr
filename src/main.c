@@ -7,7 +7,7 @@
  * 3. Logging system for debug output
  * 4. Networking (UDP server)
  * 
- * Target Hardware: ST NUCLEO-F767ZI or NUCLEO-H755ZI-Q development board
+ * Target Hardware: ST NUCLEO-H755ZI-Q development board
  * - UART console for debug messages (115200 baud via ST-LINK USB)
  */
 
