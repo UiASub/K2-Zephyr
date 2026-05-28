@@ -139,8 +139,8 @@ slot for test boot, resets the MCU, and then polls until MCUmgr responds again:
 ```
 
 By default, the helper finds the signed image at
-`build-h755-ota/<app>/zephyr/zephyr.signed.bin`. To upload a different signed
-image:
+`build-h755-ota/K2-Zephyr/zephyr/zephyr.signed.bin`. To upload a different
+signed image:
 
 ```bash
 ./tools/k2-ota.sh path/to/zephyr.signed.bin
@@ -155,7 +155,7 @@ On Windows:
 Manual fallback:
 
 ```bash
-mcumgr --conntype udp '--connstring=[10.77.0.2]:1337' image upload build-h755-ota/<app>/zephyr/zephyr.signed.bin
+mcumgr --conntype udp '--connstring=[10.77.0.2]:1337' image upload build-h755-ota/K2-Zephyr/zephyr/zephyr.signed.bin
 mcumgr --conntype udp '--connstring=[10.77.0.2]:1337' image list
 mcumgr --conntype udp '--connstring=[10.77.0.2]:1337' image test <slot-1-hash>
 mcumgr --conntype udp '--connstring=[10.77.0.2]:1337' reset

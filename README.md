@@ -86,7 +86,7 @@ On Windows:
 This creates a sysbuild output with:
 
 - MCUboot in `build-h755-ota/mcuboot`
-- The signed application image in `build-h755-ota/<app>/zephyr/zephyr.signed.bin`
+- The signed application image in `build-h755-ota/K2-Zephyr/zephyr/zephyr.signed.bin`
 
 Flash the OTA build over USB only for first-time provisioning or recovery:
 
