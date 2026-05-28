@@ -30,6 +30,7 @@
 #include "net/setpoint_override.h"
 #include "net/system_control.h"
 #include "net/ota_confirm.h"
+#include "display/oled.h"
 
 /* Defined in net/log_backend_udp.c */
 void log_backend_udp_topside_start(void);
@@ -73,6 +74,9 @@ int main(void)
 
     // Start resource monitor thread
     resource_monitor_start();
+
+    // Start OLED display updater
+    display_start();
 
     // Start IMU sensor telemetry sender
     sensor_sender_start();

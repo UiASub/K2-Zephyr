@@ -12,9 +12,14 @@
 };
 
 / {
+    chosen {
+        zephyr,display = &imu_oled;
+    };
+
     aliases {
         vesc-uart = &usart6;
         vn100s = &vn100s;
+        imu-oled = &imu_oled;
     };
 };
 
@@ -36,5 +41,30 @@
         spi-max-frequency = <1000000>;
         duplex = <0>;
         frame-format = <0>;
+    };
+};
+
+/* 0.91 inch SSD1306 OLED on I2C4.
+ * SCL = PD12, SDA = PD13.
+ */
+&i2c4 {
+    status = "okay";
+    pinctrl-0 = <&i2c4_scl_pd12 &i2c4_sda_pd13>;
+    pinctrl-names = "default";
+    clock-frequency = <I2C_BITRATE_STANDARD>;
+
+    imu_oled: ssd1306@3c {
+        compatible = "solomon,ssd1306";
+        reg = <0x3c>;
+        width = <128>;
+        height = <32>;
+        segment-offset = <0>;
+        page-offset = <0>;
+        display-offset = <0>;
+        multiplex-ratio = <31>;
+        segment-remap;
+        com-invdir;
+        com-sequential;
+        prechargep = <0x22>;
     };
 };

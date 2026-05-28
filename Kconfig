@@ -1,0 +1,12 @@
+config K2_OLED
+	bool "K2 OLED status display"
+	default n
+	select I2C
+	select DISPLAY
+	select SSD1306
+	select CHARACTER_FRAMEBUFFER
+	help
+	  Enable the SSD1306 OLED status display, its display update thread,
+	  and the user-button display mode selector.
+
+source "Kconfig.zephyr"

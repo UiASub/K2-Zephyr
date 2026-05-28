@@ -41,3 +41,5 @@ target_sources(app PRIVATE src/main.c
                            src/vesc/thruster_mapping.c
                            src/pid/pid_config.c
                            src/pid/pid_controller.c)
+
+target_sources_ifdef(CONFIG_K2_OLED app PRIVATE src/display/oled.c)
