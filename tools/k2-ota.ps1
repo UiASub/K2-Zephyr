@@ -1,5 +1,5 @@
 param(
-    [string]$Image = "build-h755-ota/K2-Zephyr/zephyr/zephyr.signed.bin",
+    [string]$Image = $env:IMAGE,
     [string]$McuIp = "10.77.0.2",
     [int]$McuPort = 1337,
     [double]$Timeout = 10,
@@ -9,6 +9,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+$ProjectDir = Split-Path -Parent $ScriptDir
 
 function Find-Mcumgr {
     if ($env:MCUMGR) {
@@ -36,6 +38,27 @@ mcumgr not found. Install it with:
   go install github.com/apache/mynewt-mcumgr-cli/mcumgr@latest
 Then make sure %USERPROFILE%\go\bin is on PATH.
 "@
+}
+
+function Find-DefaultImage {
+    $matches = @(Get-ChildItem -Path (Join-Path $ProjectDir "build-h755-ota") `
+        -Recurse `
+        -Filter "zephyr.signed.bin" `
+        -File `
+        -ErrorAction SilentlyContinue | Where-Object {
+            $_.FullName -match "[\\/]zephyr[\\/]zephyr\.signed\.bin$"
+        })
+
+    if ($matches.Count -eq 1) {
+        return $matches[0].FullName
+    }
+
+    if ($matches.Count -gt 1) {
+        $paths = ($matches | ForEach-Object { "  $($_.FullName)" }) -join [Environment]::NewLine
+        throw "Multiple signed images found under build-h755-ota:$([Environment]::NewLine)$paths$([Environment]::NewLine)Pass the image path explicitly."
+    }
+
+    throw "Image not found under $ProjectDir\build-h755-ota\*\zephyr\zephyr.signed.bin. Build one first, for example: .\build.ps1"
 }
 
 function Invoke-Mcumgr {
@@ -109,9 +132,12 @@ function Test-HashActiveConfirmed {
 }
 
 $script:McumgrBin = Find-Mcumgr
+if (-not $Image) {
+    $Image = Find-DefaultImage
+}
 
 if (-not (Test-Path $Image)) {
-    throw "Image not found: $Image. Build one first, for example: ./build.sh --h7 --ota"
+    throw "Image not found: $Image. Build one first, for example: .\build.ps1"
 }
 
 Write-Host "MCU: ${McuIp}:${McuPort}"
