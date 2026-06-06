@@ -1,4 +1,5 @@
 #include "nucleo_h755zi_q_stm32h755xx_m7_partitions.overlay"
+#include <zephyr/dt-bindings/pwm/pwm.h>
 
 /* Enable USART6 for VESC communication
  * TX = PC6 (D1 on CN10 pin 2)
@@ -66,5 +67,30 @@
         com-invdir;
         com-sequential;
         prechargep = <0x22>;
+    };
+};
+
+/* Dimmable light output: TIM1_CH1 on D6/PA8 drives the external LED driver
+ * that powers both light LEDs from a single PWM signal.
+ * Prescaler is chosen so the 1 kHz auto-reload stays well within the 16-bit
+ * TIM1 range while leaving >>256 duty steps for smooth dimming.
+ */
+&timers1 {
+    st,prescaler = <128>;
+    status = "okay";
+};
+
+&pwm1 {
+    status = "okay";
+    pinctrl-0 = <&tim1_ch1_pa8>;
+    pinctrl-names = "default";
+};
+
+/ {
+    pwmleds {
+        compatible = "pwm-leds";
+        rov_light: rov_light {
+            pwms = <&pwm1 1 PWM_MSEC(1) PWM_POLARITY_NORMAL>;
+        };
     };
 };
