@@ -13,7 +13,7 @@ typedef struct {
     int8_t pitch;        /* Pitch rotation (-128 to +127) */
     int8_t yaw;          /* Yaw rotation (-128 to +127) */
     uint8_t light;       /* Light brightness (0-255) */
-    uint8_t manipulator; /* Manipulator position (0-255) */
+    int8_t manipulator;  /* Manipulator servo setpoint (-128 to +127) */
 } rov_command_t;
 
 /* Snapshot of control loop state for topside telemetry.
@@ -22,6 +22,8 @@ typedef struct {
     float setpoint[6];  /* Target value per axis */
     float output[6];    /* PID output [-1,+1] or passthrough */
     float error[6];     /* setpoint - measurement (0 when passthrough) */
+    float manipulator_deg;       /* Applied manipulator setpoint in degrees */
+    uint16_t manipulator_pulse_us; /* Applied servo pulse width */
 } control_telemetry_t;
 
 /* Public functions */

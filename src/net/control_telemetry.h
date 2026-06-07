@@ -9,6 +9,8 @@ typedef struct {
     float setpoint[6];      /* surge, sway, heave, roll, pitch, yaw */
     float output[6];        /* PID output [-1,+1] or passthrough */
     float error[6];         /* setpoint - measurement (0 when passthrough) */
+    float manipulator_deg;  /* applied manipulator setpoint */
+    uint16_t manipulator_pulse_us; /* applied servo pulse width */
     uint32_t crc32;         /* IEEE 802.3, network byte order */
 } __attribute__((packed)) control_telem_packet_t;
 
