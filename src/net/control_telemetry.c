@@ -56,6 +56,8 @@ static void ctrl_telem_thread(void *a, void *b, void *c)
         memcpy(pkt.setpoint, snap.setpoint, sizeof(pkt.setpoint));
         memcpy(pkt.output, snap.output, sizeof(pkt.output));
         memcpy(pkt.error, snap.error, sizeof(pkt.error));
+        pkt.manipulator_deg = snap.manipulator_deg;
+        pkt.manipulator_pulse_us = snap.manipulator_pulse_us;
 
         size_t crc_len = sizeof(pkt) - sizeof(pkt.crc32);
         pkt.crc32 = htonl(crc32_calc(&pkt, crc_len));

@@ -14,6 +14,8 @@ LOG_MODULE_REGISTER(rov_control, LOG_LEVEL_INF);
 
 /* Dimmable light output (TIM1_CH1 / D6 / PA8 → external LED driver). */
 static const struct pwm_dt_spec light_pwm = PWM_DT_SPEC_GET(DT_NODELABEL(rov_light));
+/* Manipulator servo output (TIM4_CH4 / D9 / PD15). */
+static const struct pwm_dt_spec manipulator_pwm = PWM_DT_SPEC_GET(DT_NODELABEL(rov_manipulator_servo));
 
 /* ---------------------------------------------------------------------------
  * Configuration
@@ -27,6 +29,12 @@ static const struct pwm_dt_spec light_pwm = PWM_DT_SPEC_GET(DT_NODELABEL(rov_lig
 #define PID_OUTPUT_LIMIT    1.0f     /* PID output range ±1.0 (maps to ±50% via mixing) */
 #define SPEED_DECAY         0.995f   /* leaky integrator factor for accel→speed */
 #define LOG_INTERVAL        50       /* log every 50 iterations = 1 s */
+
+#define MANIP_SERVO_MIN_US      1000U
+#define MANIP_SERVO_NEUTRAL_US  1500U
+#define MANIP_SERVO_MAX_US      2000U
+#define MANIP_SERVO_MAX_DEG     50.0f
+#define MANIP_SERVO_SLEW_US     50U
 
 /* ---------------------------------------------------------------------------
  * Thread / queue
@@ -47,7 +55,7 @@ static struct {
     int8_t pitch;
     int8_t yaw;
     uint8_t light;
-    uint8_t manipulator;
+    int8_t manipulator;
 } pilot = {0};
 
 K_MUTEX_DEFINE(pilot_mutex);
@@ -73,6 +81,8 @@ static float depth_setpoint;
 static control_telemetry_t ctrl_telem;
 K_MUTEX_DEFINE(ctrl_telem_mutex);
 
+static uint16_t manipulator_applied_us = MANIP_SERVO_NEUTRAL_US;
+
 /* Manual setpoint override from topside (for testing/debugging) */
 static uint8_t override_mask;           /* bitmask: bit 0=surge … bit 5=yaw */
 static float   override_setpoint[6];
@@ -94,6 +104,26 @@ static float wrap_180(float angle)
 static inline float stick_normalize(int8_t v)
 {
     return (float)v / 127.0f;
+}
+
+static uint16_t manipulator_command_to_pulse(int8_t command)
+{
+    int32_t pulse = (int32_t)MANIP_SERVO_NEUTRAL_US +
+                    ((int32_t)command * ((int32_t)MANIP_SERVO_MAX_US - (int32_t)MANIP_SERVO_NEUTRAL_US)) / 127;
+
+    if (pulse < (int32_t)MANIP_SERVO_MIN_US) {
+        return MANIP_SERVO_MIN_US;
+    }
+    if (pulse > (int32_t)MANIP_SERVO_MAX_US) {
+        return MANIP_SERVO_MAX_US;
+    }
+    return (uint16_t)pulse;
+}
+
+static float manipulator_pulse_to_deg(uint16_t pulse_us)
+{
+    return ((float)pulse_us - (float)MANIP_SERVO_NEUTRAL_US) *
+           (MANIP_SERVO_MAX_DEG / ((float)MANIP_SERVO_MAX_US - (float)MANIP_SERVO_NEUTRAL_US));
 }
 
 /* Read depth sensor — stub: returns 0 until real sensor is integrated */
@@ -333,7 +363,7 @@ static void stabilise(float out[6])
 }
 
 /* ---------------------------------------------------------------------------
- * Light / manipulator stubs
+ * Light / manipulator outputs
  * --------------------------------------------------------------------------- */
 static void rov_set_light(uint8_t brightness)
 {
@@ -350,11 +380,29 @@ static void rov_set_light(uint8_t brightness)
     }
 }
 
-static void rov_set_manipulator(uint8_t position)
+static void rov_set_manipulator(int8_t command)
 {
-    if (position > 0) {
-        LOG_DBG("Manipulator: %d", position);
+    uint16_t target_us = manipulator_command_to_pulse(command);
+
+    if (target_us > manipulator_applied_us + MANIP_SERVO_SLEW_US) {
+        manipulator_applied_us += MANIP_SERVO_SLEW_US;
+    } else if (target_us + MANIP_SERVO_SLEW_US < manipulator_applied_us) {
+        manipulator_applied_us -= MANIP_SERVO_SLEW_US;
+    } else {
+        manipulator_applied_us = target_us;
     }
+
+    if (pwm_is_ready_dt(&manipulator_pwm)) {
+        int ret = pwm_set_pulse_dt(&manipulator_pwm, (uint32_t)manipulator_applied_us * 1000U);
+        if (ret < 0) {
+            LOG_ERR("Failed to set manipulator PWM (%u us): %d", (unsigned int)manipulator_applied_us, ret);
+        }
+    }
+
+    k_mutex_lock(&ctrl_telem_mutex, K_FOREVER);
+    ctrl_telem.manipulator_deg = manipulator_pulse_to_deg(manipulator_applied_us);
+    ctrl_telem.manipulator_pulse_us = manipulator_applied_us;
+    k_mutex_unlock(&ctrl_telem_mutex);
 }
 
 /* ---------------------------------------------------------------------------
@@ -397,6 +445,7 @@ static void rov_control_thread(void *arg1, void *arg2, void *arg3)
             thruster_output_t output;
             thruster_calculate_6dof(zeros, &output);
             thruster_send_outputs(&output);
+            rov_set_manipulator(0);
             if (!timed_out) {
                 timed_out = true;
                 LOG_WRN("Comms timeout — thrusters killed");
@@ -453,9 +502,7 @@ static void rov_control_thread(void *arg1, void *arg2, void *arg3)
             k_mutex_lock(&pilot_mutex, K_FOREVER);
             /* Always update the light so brightness 0 turns the LEDs off. */
             rov_set_light(pilot.light);
-            if (pilot.manipulator > 0) {
-                rov_set_manipulator(pilot.manipulator);
-            }
+            rov_set_manipulator(pilot.manipulator);
             k_mutex_unlock(&pilot_mutex);
         }
 
@@ -486,6 +533,20 @@ void rov_control_init(void)
     } else if (pwm_set_pulse_dt(&light_pwm, 0) < 0) {
         LOG_ERR("Failed to initialize light PWM to off");
     }
+
+    if (!pwm_is_ready_dt(&manipulator_pwm)) {
+        LOG_ERR("Manipulator PWM device not ready");
+    } else {
+        manipulator_applied_us = MANIP_SERVO_NEUTRAL_US;
+        if (pwm_set_pulse_dt(&manipulator_pwm, MANIP_SERVO_NEUTRAL_US * 1000U) < 0) {
+            LOG_ERR("Failed to initialize manipulator PWM to neutral");
+        }
+    }
+
+    k_mutex_lock(&ctrl_telem_mutex, K_FOREVER);
+    ctrl_telem.manipulator_deg = 0.0f;
+    ctrl_telem.manipulator_pulse_us = MANIP_SERVO_NEUTRAL_US;
+    k_mutex_unlock(&ctrl_telem_mutex);
 
     /* Initialize all PID controllers (gains start at 0 → bypass mode) */
     for (int i = 0; i < PID_AXIS_COUNT; i++) {
@@ -552,7 +613,7 @@ void rov_send_command(uint32_t sequence, uint64_t payload)
     command.pitch       = (int8_t)((payload >> 32) & 0xFF) - 128;
     command.yaw         = (int8_t)((payload >> 40) & 0xFF) - 128;
     command.light       = (uint8_t)((payload >> 48) & 0xFF);
-    command.manipulator = (uint8_t)((payload >> 56) & 0xFF);
+    command.manipulator = (int8_t)((payload >> 56) & 0xFF) - 128;
 
     static bool first_cmd;
     if (!first_cmd) {

@@ -78,12 +78,27 @@
 &timers1 {
     st,prescaler = <128>;
     status = "okay";
+
+    pwm1: pwm {
+        status = "okay";
+        pinctrl-0 = <&tim1_ch1_pa8>;
+        pinctrl-names = "default";
+    };
 };
 
-&pwm1 {
+/* Manipulator servo output: TIM4_CH4 on D9/PD15.
+ * TIM4 is separate from the light's TIM1, so the servo can run at 50 Hz
+ * without changing the 1 kHz light PWM period.
+ */
+&timers4 {
+    st,prescaler = <128>;
     status = "okay";
-    pinctrl-0 = <&tim1_ch1_pa8>;
-    pinctrl-names = "default";
+
+    pwm4: pwm {
+        status = "okay";
+        pinctrl-0 = <&tim4_ch4_pd15>;
+        pinctrl-names = "default";
+    };
 };
 
 / {
@@ -91,6 +106,9 @@
         compatible = "pwm-leds";
         rov_light: rov_light {
             pwms = <&pwm1 1 PWM_MSEC(1) PWM_POLARITY_NORMAL>;
+        };
+        rov_manipulator_servo: rov_manipulator_servo {
+            pwms = <&pwm4 4 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
         };
     };
 };
