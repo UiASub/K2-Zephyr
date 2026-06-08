@@ -78,12 +78,12 @@
 &timers1 {
     st,prescaler = <128>;
     status = "okay";
-};
 
-&pwm1 {
-    status = "okay";
-    pinctrl-0 = <&tim1_ch1_pa8>;
-    pinctrl-names = "default";
+    pwm1: pwm {
+        status = "okay";
+        pinctrl-0 = <&tim1_ch1_pa8>;
+        pinctrl-names = "default";
+    };
 };
 
 / {
