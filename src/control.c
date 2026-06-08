@@ -1,5 +1,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/drivers/pwm.h>
 #include <string.h>
 #include "control.h"
 #include "pid/pid_controller.h"
@@ -12,6 +13,9 @@
 #include "vesc/vesc_uart_zephyr.h"
 
 LOG_MODULE_REGISTER(rov_control, LOG_LEVEL_INF);
+
+/* Dimmable light output (TIM1_CH1 / D6 / PA8 → external LED driver). */
+static const struct pwm_dt_spec light_pwm = PWM_DT_SPEC_GET(DT_NODELABEL(rov_light));
 
 /* ---------------------------------------------------------------------------
  * Configuration
@@ -378,8 +382,16 @@ static void stabilise(float out[6])
  * --------------------------------------------------------------------------- */
 static void rov_set_light(uint8_t brightness)
 {
-    if (brightness > 0) {
-        LOG_DBG("Light: %d%% (%d/255)", (brightness * 100) / 255, brightness);
+    if (!pwm_is_ready_dt(&light_pwm)) {
+        return;
+    }
+
+    /* Map 0..255 brightness onto 0..period duty cycle. */
+    uint32_t pulse = (uint32_t)(((uint64_t)light_pwm.period * brightness) / 255U);
+
+    int ret = pwm_set_pulse_dt(&light_pwm, pulse);
+    if (ret < 0) {
+        LOG_ERR("Failed to set light PWM (brightness %d): %d", brightness, ret);
     }
 }
 
@@ -493,9 +505,8 @@ static void rov_control_thread(void *arg1, void *arg2, void *arg3)
 
             /* Peripherals */
             k_mutex_lock(&pilot_mutex, K_FOREVER);
-            if (pilot.light > 0) {
-                rov_set_light(pilot.light);
-            }
+            /* Always update the light so brightness 0 turns the LEDs off. */
+            rov_set_light(pilot.light);
             if (pilot.manipulator > 0) {
                 rov_set_manipulator(pilot.manipulator);
             }
@@ -521,6 +532,13 @@ void rov_control_init(void)
     if (ret < 0) {
         LOG_ERR("Failed to initialize VESC UART: %d", ret);
         return;
+    }
+
+    /* Initialize the dimmable light PWM and start with the LEDs off */
+    if (!pwm_is_ready_dt(&light_pwm)) {
+        LOG_ERR("Light PWM device not ready");
+    } else if (pwm_set_pulse_dt(&light_pwm, 0) < 0) {
+        LOG_ERR("Failed to initialize light PWM to off");
     }
 
     /* Initialize all PID controllers (gains start at 0 → bypass mode) */

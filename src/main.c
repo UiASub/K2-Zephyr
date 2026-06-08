@@ -7,7 +7,7 @@
  * 3. Logging system for debug output
  * 4. Networking (UDP server)
  * 
- * Target Hardware: ST NUCLEO-F767ZI or NUCLEO-H755ZI-Q development board
+ * Target Hardware: ST NUCLEO-H755ZI-Q development board
  * - UART console for debug messages (115200 baud via ST-LINK USB)
  */
 
@@ -30,6 +30,7 @@
 #include "net/setpoint_override.h"
 #include "net/system_control.h"
 #include "net/ota_confirm.h"
+#include "display/oled.h"
 
 /* Defined in net/log_backend_udp.c */
 void log_backend_udp_topside_start(void);
@@ -73,6 +74,9 @@ int main(void)
 
     // Start resource monitor thread
     resource_monitor_start();
+
+    // Start OLED display updater
+    display_start();
 
     // Start IMU sensor telemetry sender
     sensor_sender_start();

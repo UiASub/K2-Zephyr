@@ -21,6 +21,8 @@ project(k2_zephyr_app)
 set(BOARD_FLASH_RUNNER openocd)
 set(BOARD_DEBUG_RUNNER openocd)
 
+message(STATUS "K2 flashing: use Ethernet OTA helpers for normal updates; use west flash only for first-time USB provisioning or debug recovery.")
+
 # Tell Zephyr to compile our main source file into the application
 # 'app' is Zephyr's standard target name for the main application binary
 target_sources(app PRIVATE src/main.c
@@ -40,3 +42,5 @@ target_sources(app PRIVATE src/main.c
                            src/vesc/thruster_mapping.c
                            src/pid/pid_config.c
                            src/pid/pid_controller.c)
+
+target_sources_ifdef(CONFIG_K2_OLED app PRIVATE src/display/oled.c)

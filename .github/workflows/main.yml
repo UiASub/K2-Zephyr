@@ -16,7 +16,6 @@ jobs:
       matrix:
         board:
           - nucleo_h755zi_q/stm32h755xx/m7
-          - nucleo_f767zi
 
     outputs:
       tag: ${{ steps.version.outputs.tag }}

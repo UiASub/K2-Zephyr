@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MCU_IP="${MCU_IP:-10.77.0.2}"
 MCU_PORT="${MCU_PORT:-1337}"
-IMAGE="${IMAGE:-build-h755-ota/K2-Zephyr/zephyr/zephyr.signed.bin}"
+IMAGE="${IMAGE:-}"
 TIMEOUT="${TIMEOUT:-10}"
 TRIES="${TRIES:-2}"
 POLL_SECONDS="${POLL_SECONDS:-30}"
@@ -91,11 +93,37 @@ find_mcumgr() {
     exit 1
 }
 
+find_default_image() {
+    local matches=()
+    shopt -s nullglob
+    matches=("${PROJECT_DIR}"/build-h755-ota/*/zephyr/zephyr.signed.bin)
+    shopt -u nullglob
+
+    if ((${#matches[@]} == 1)); then
+        echo "${matches[0]}"
+        return
+    fi
+
+    if ((${#matches[@]} > 1)); then
+        echo "Multiple signed images found under build-h755-ota:" >&2
+        printf '  %s\n' "${matches[@]}" >&2
+        echo "Pass the image path explicitly." >&2
+        exit 1
+    fi
+
+    echo "Image not found under ${PROJECT_DIR}/build-h755-ota/*/zephyr/zephyr.signed.bin" >&2
+    echo "Build one first, for example: ./build.sh" >&2
+    exit 1
+}
+
 MCUMGR_BIN="$(find_mcumgr)"
+if [[ -z "$IMAGE" ]]; then
+    IMAGE="$(find_default_image)"
+fi
 
 if [[ ! -f "$IMAGE" ]]; then
     echo "Image not found: $IMAGE" >&2
-    echo "Build one first, for example: ./build.sh --h7 --ota" >&2
+    echo "Build one first, for example: ./build.sh" >&2
     exit 1
 fi
 

@@ -43,13 +43,14 @@ use `./install_zephyr.sh -h` to see help
 
 ## Building
 
-Default target is H7 (`nucleo_h755zi_q/stm32h755xx/m7`).
+The supported target is H7 (`nucleo_h755zi_q/stm32h755xx/m7`). The build
+scripts default to an MCUboot-enabled OTA build.
 
 ```bash
 ./build.sh
 ./build.sh --h7
-./build.sh --f7
 ./build.sh --ota
+./build.sh --no-ota
 ```
 
 On Windows:
@@ -57,46 +58,49 @@ On Windows:
 ```powershell
 .\build.ps1
 .\build.ps1 --H7
-.\build.ps1 --F7
 .\build.ps1 --OTA
+.\build.ps1 --NO-OTA
 ```
+
+Use `--no-ota` only when you intentionally need a plain non-MCUboot development
+image. F7 Nucleo support is sunset and is no longer documented or built by the
+project tooling.
 
 ## Ethernet OTA
 
-The repository now includes an MCUboot-based Ethernet OTA path using dual image
-slots and MCUmgr over UDP.
+The normal K2 firmware update path is MCUboot-based Ethernet OTA using dual
+image slots and MCUmgr over UDP.
 
 Build an OTA image with:
 
 ```bash
-./build.sh --h7 --ota
-./build.sh --f7 --ota
+./build.sh
 ```
 
 On Windows:
 
 ```powershell
-.\build.ps1 --H7 --OTA
-.\build.ps1 --F7 --OTA
+.\build.ps1
 ```
 
-For the H7 target, this creates a sysbuild output with:
+This creates a sysbuild output with:
 
 - MCUboot in `build-h755-ota/mcuboot`
 - The signed application image in `build-h755-ota/K2-Zephyr/zephyr/zephyr.signed.bin`
 
-Flash the OTA build once with:
+Flash the OTA build over USB only for first-time provisioning or recovery:
 
 ```bash
 west flash -d build-h755-ota
 ```
 
-After that, upload `zephyr.signed.bin` with an MCUmgr-compatible UDP client to
-the device on port `1337`, mark the image for test boot, and reset the device.
+After the board has been provisioned, upload `zephyr.signed.bin` with an
+MCUmgr-compatible UDP client to the device on port `1337`, mark the image for
+test boot, and reset the device.
 The application confirms the new image automatically after it finishes startup
 and the network interface is up. If the new image fails to boot or is rebooted
 before confirmation, MCUboot reverts to the previous image on the next reset.
-The field helper wraps the upload/test/reset flow:
+The helper wraps the normal upload/test/reset flow:
 
 ```bash
 ./tools/k2-ota.sh
