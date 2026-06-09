@@ -36,6 +36,7 @@ target_sources(app PRIVATE src/main.c
                            src/net/ota_confirm.c
                            src/imu/vn100s.c
                            src/imu/axis_config.c
+                           src/depth/ms5837.c
                            src/vesc/vesc_protocol.c
                            src/vesc/vesc_uart_zephyr.c
                            src/vesc/thruster_mapping.c

@@ -7,6 +7,7 @@
 #include "pid/pid_config.h"
 #include "imu/axis_config.h"
 #include "imu/vn100s.h"
+#include "depth/ms5837.h"
 #include "vesc/thruster_mapping.h"
 #include "vesc/vesc_uart_zephyr.h"
 
@@ -66,7 +67,7 @@ static float angle_setpoint[3];          /* [0]=roll [1]=pitch [2]=yaw */
 /* Estimated speed for surge / sway (m/s, integrated from accelerometer) */
 static float est_speed[2];               /* [0]=surge(x) [1]=sway(y) */
 
-/* Depth setpoint (m, integrated from stick) — sensor stub for now */
+/* Depth setpoint (m, integrated from stick) */
 static float depth_setpoint;
 
 /* Control telemetry snapshot — written by control loop, read by sender thread */
@@ -96,10 +97,12 @@ static inline float stick_normalize(int8_t v)
     return (float)v / 127.0f;
 }
 
-/* Read depth sensor — stub: returns 0 until real sensor is integrated */
+/* Read latest depth (m, positive = deeper) from the MS5837 driver.
+ * The sensor runs its own ~90 Hz poll thread, so this is a cheap getter that
+ * always returns a value at most ~11 ms old — fresher than the 20 ms loop. */
 static float depth_sensor_read(void)
 {
-    return 0.0f;
+    return ms5837_get_depth_m();
 }
 
 /* ---------------------------------------------------------------------------
@@ -301,7 +304,7 @@ static void stabilise(float out[6])
     }
 
     /* ================================================================
-     *  HEAVE  —  depth-tracking PID (stub sensor for now)
+     *  HEAVE  —  depth-tracking PID (MS5837 depth sensor)
      *
      *  Stick → depth rate → integrate → depth setpoint
      *  PID(depth_error) → output

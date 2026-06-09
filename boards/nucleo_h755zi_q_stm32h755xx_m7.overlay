@@ -21,6 +21,22 @@
         vesc-uart = &usart6;
         vn100s = &vn100s;
         imu-oled = &imu_oled;
+        depth-sensor = &depth_sensor;
+    };
+};
+
+/* MS5837-30BA depth/pressure sensor on I2C1 (PB8 = SCL, PB9 = SDA).
+ * I2C1 is enabled by the board DTS at 400 kHz (I2C_BITRATE_FAST); we just add
+ * the sensor child node.  External 4.7 kOhm pull-ups to 3V3 provide the I2C
+ * rise time, so 400 kHz fast mode is fine.  (The MCU's weak internal pull-ups
+ * stay enabled via the SoC pinctrl but are harmless in parallel.)
+ * Fixed I2C address 0x76.
+ */
+&i2c1 {
+    depth_sensor: ms5837@76 {
+        compatible = "meas,ms5837-30ba";
+        reg = <0x76>;
+        status = "okay";
     };
 };
 
