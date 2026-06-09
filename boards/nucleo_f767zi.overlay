@@ -1,3 +1,11 @@
+/* MS5837 uses Arduino D15/D14 (PB8/PB9). The Zephyr STM32 I2C1 controller
+ * still sees no ACK on this working Arduino setup, so leave I2C1 disabled and
+ * let the depth driver own these pins through its slow GPIO I2C transport.
+ */
+&i2c1 {
+    status = "disabled";
+};
+
 &mac {
 	status = "okay";
 	pinctrl-0 = <&eth_mdc_pc1 &eth_mdio_pa2 &eth_rxd0_pc4 &eth_rxd1_pc5

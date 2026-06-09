@@ -17,4 +17,6 @@ build*/
 # Local environment and assistant settings
 .env
 .claude/*
+CLAUDE.md
+agent.md
 .idea

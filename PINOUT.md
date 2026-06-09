@@ -13,6 +13,17 @@
 
 ---
 
+## Depth Sensor (MS5837-30BA) - D15/D14
+| Function | MCU Pin | ST Morpho | Zio / Arduino | Direction |
+|----------|---------|-----------|----------------|-----------|
+| SCL      | PB8     | CN12 pin 3| CN7 pin 2 / D15| Bidir     |
+| SDA      | PB9     | CN12 pin 5| CN7 pin 4 / D14| Bidir     |
+
+**Interface**: GPIO bitbang I2C on D15/D14, about 10 kHz, fixed address 0x76
+**Data**: Depth, pressure, temperature
+
+---
+
 ## ESC Control - UART
 | Function | Pin | Nucleo Label | Baud | Direction |
 |----------|-----|--------------|------|-----------|

@@ -9,7 +9,8 @@
  *                   provided setpoint; other axes are unaffected).
  * Type 0x02 = CLEAR: remove all overrides, return to normal stick control.
  *
- * Units: surge/sway in m/s, heave in m, roll/pitch/yaw in degrees.
+ * Units: surge/sway in m/s, heave positive-down depth in m,
+ * roll/pitch/yaw in degrees.
  */
 
 #include <zephyr/kernel.h>
