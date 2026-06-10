@@ -1,0 +1,48 @@
+/ {
+	aliases {
+		vesc-uart = &uart1;
+	};
+};
+
+&uart1 {
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&uart1_default>;
+	pinctrl-names = "default";
+};
+
+&i2c0 {
+	status = "disabled";
+};
+
+&i2c1 {
+	status = "disabled";
+};
+
+&i2s0 {
+	status = "disabled";
+};
+
+&i2s1 {
+	status = "disabled";
+};
+
+&spi2 {
+	status = "disabled";
+};
+
+&spi3 {
+	status = "disabled";
+};
+
+&twai {
+	status = "disabled";
+};
+
+&wifi {
+	status = "disabled";
+};
+
+&esp32_bt_hci {
+	status = "disabled";
+};
