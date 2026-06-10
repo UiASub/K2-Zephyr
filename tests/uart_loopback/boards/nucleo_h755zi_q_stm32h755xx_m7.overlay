@@ -1,0 +1,17 @@
+/* UART loopback test on PB6/PB7.
+ *
+ * Wire PB6 directly to PB7 before flashing this test.
+ * PB6 = LPUART1_TX, PB7 = LPUART1_RX.
+ */
+&lpuart1 {
+    status = "okay";
+    pinctrl-0 = <&lpuart1_tx_pb6 &lpuart1_rx_pb7>;
+    pinctrl-names = "default";
+    current-speed = <115200>;
+};
+
+/ {
+    aliases {
+        loopback-uart = &lpuart1;
+    };
+};

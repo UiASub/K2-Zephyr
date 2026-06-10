@@ -1,0 +1,18 @@
+/* VESC UART duty test on PB6/PB7.
+ *
+ * PB6 = LPUART1_TX, connect to VESC RX.
+ * PB7 = LPUART1_RX, connect to VESC TX if telemetry is needed.
+ * Nucleo GND and VESC GND must be common.
+ */
+&lpuart1 {
+    status = "okay";
+    pinctrl-0 = <&lpuart1_tx_pb6 &lpuart1_rx_pb7>;
+    pinctrl-names = "default";
+    current-speed = <115200>;
+};
+
+/ {
+    aliases {
+        vesc-test-uart = &lpuart1;
+    };
+};

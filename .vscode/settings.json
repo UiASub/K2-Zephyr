@@ -1,0 +1,19 @@
+{
+    "cmake.configureOnOpen": false,
+
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build-h755/compile_commands.json",
+    "C_Cpp.default.intelliSenseMode": "gcc-arm",
+    "C_Cpp.default.cStandard": "c11",
+    "C_Cpp.default.cppStandard": "c++17",
+
+    "files.associations": {
+        "prj.conf": "kconfig",
+        "*.conf": "kconfig",
+        "*.overlay": "devicetree",
+        "*.dts": "devicetree",
+        "*.dtsi": "devicetree",
+        "Kconfig": "kconfig"
+    },
+
+    "terminal.integrated.defaultProfile.windows": "PowerShell"
+}
