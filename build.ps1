@@ -8,10 +8,12 @@ $venvActivateUnix = Join-Path -Path $workspace -ChildPath '.venv/bin/Activate.ps
 $board = 'nucleo_h755zi_q/stm32h755xx/m7'
 $boardLabel = 'H7 (nucleo_h755zi_q/stm32h755xx/m7)'
 $otaBuild = $true
+$otaArgSeen = $false
 
 function Show-Usage {
-    Write-Host 'Usage: .\build.ps1 [--h7|--H7] [--ota|--OTA] [--no-ota|--NO-OTA]'
-    Write-Host 'Defaults to the H7 OTA build. Use --no-ota only for a plain non-MCUboot development build.'
+    Write-Host 'Usage: .\build.ps1 [--h7|--H7|--f7|--F7] [--ota|--OTA] [--no-ota|--NO-OTA]'
+    Write-Host 'Defaults to the H7 OTA build. F7 defaults to a plain development build.'
+    Write-Host 'Use --no-ota only when you intentionally need a plain non-MCUboot development build.'
 }
 
 function Show-FlashGuidance {
@@ -32,16 +34,23 @@ function Invoke-West {
 foreach ($arg in $args) {
     switch ($arg.ToLowerInvariant()) {
         '--h7' {
+            $board = 'nucleo_h755zi_q/stm32h755xx/m7'
+            $boardLabel = 'H7 (nucleo_h755zi_q/stm32h755xx/m7)'
         }
         '--f7' {
-            Write-Host "F7 support has been sunset. Use the H7 target: $board"
-            exit 1
+            $board = 'nucleo_f767zi'
+            $boardLabel = 'F7 (nucleo_f767zi)'
+            if (-not $otaArgSeen) {
+                $otaBuild = $false
+            }
         }
         '--ota' {
             $otaBuild = $true
+            $otaArgSeen = $true
         }
         '--no-ota' {
             $otaBuild = $false
+            $otaArgSeen = $true
         }
         '--help' {
             Show-Usage
@@ -66,14 +75,14 @@ if (Test-Path $venvActivateWindows) {
 
 Set-Location $projectPath
 if ($otaBuild) {
-    $buildDir = 'build-h755-ota'
+    $buildDir = if ($board -eq 'nucleo_f767zi') { 'build-f767-ota' } else { 'build-h755-ota' }
     Write-Host "Building K2-Zephyr OTA image for $boardLabel..."
     Invoke-West build --sysbuild -p -b $board -d $buildDir $projectPath -- "-DEXTRA_CONF_FILE=ota.conf"
     Write-Host "OTA build complete for $boardLabel."
     Write-Host "Signed image: $buildDir\*\zephyr\zephyr.signed.bin"
     Show-FlashGuidance
 } else {
-    $buildDir = 'build-h755'
+    $buildDir = if ($board -eq 'nucleo_f767zi') { 'build-f767' } else { 'build-h755' }
     Write-Host "Building K2-Zephyr non-OTA image for $boardLabel..."
     Invoke-West build -p -b $board -d $buildDir $projectPath
     Write-Host "Non-OTA build complete for $boardLabel."

@@ -43,12 +43,14 @@ use `./install_zephyr.sh -h` to see help
 
 ## Building
 
-The supported target is H7 (`nucleo_h755zi_q/stm32h755xx/m7`). The build
-scripts default to an MCUboot-enabled OTA build.
+The primary target is H7 (`nucleo_h755zi_q/stm32h755xx/m7`). The build scripts
+default to an MCUboot-enabled OTA build for H7. F7 (`nucleo_f767zi`) is also
+available as a plain development build target.
 
 ```bash
 ./build.sh
 ./build.sh --h7
+./build.sh --f7
 ./build.sh --ota
 ./build.sh --no-ota
 ```
@@ -58,13 +60,14 @@ On Windows:
 ```powershell
 .\build.ps1
 .\build.ps1 --H7
+.\build.ps1 --F7
 .\build.ps1 --OTA
 .\build.ps1 --NO-OTA
 ```
 
 Use `--no-ota` only when you intentionally need a plain non-MCUboot development
-image. F7 Nucleo support is sunset and is no longer documented or built by the
-project tooling.
+image. `--f7` defaults to a plain development build; pass `--f7 --ota` only if
+you intentionally need to test the OTA/sysbuild path on that board.
 
 ## Ethernet OTA
 
