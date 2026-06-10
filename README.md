@@ -1,121 +1,44 @@
-# NUCLEO-H755ZI-Q + Zephyr
+# K2 Minimal ESC Debug Firmware
 
-Default board docs: <https://docs.zephyrproject.org/4.2.0/boards/st/nucleo_h755zi_q/doc/index.html>
+This branch intentionally builds a stripped Zephyr app for debugging ESC UART
+communication. It does not start Ethernet, IMU, PID, thruster mapping, OTA, or
+OLED code.
 
-UiASub Setup Guide: <https://wiki.uiasub.no/k2zephyr/>
+The firmware:
 
-Official Setup Guide: <https://docs.zephyrproject.org/4.2.0/develop/getting_started/index.html>
-
-## Required versions
-
-- **Zephyr project**: v4.2.0
-- **Zephyr SDK**: 0.17.2
-
-### Recommended version
-
-- **Python**: 3.12
-
-## Quick Installation
-
-See [intsall guide](https://wiki.uiasub.no/k2zephyr/INSTALL_GUIDE/) for STM32CubeProgrammer (if installed, continue)
-
-### Windows in PowerShell (Admin)
-
-```bash
-Invoke-WebRequest https://raw.githubusercontent.com/UiASub/K2-Zephyr/main/install_zephyr.ps1 -OutFile install_zephyr.ps1
-# Use script:
-Set-ExecutionPolicy -ExecutionPolicy Bypass -File install_zephyr.ps1
-```
-
-You need [winget](https://aka.ms/getwinget) to install dependencies.
-
-### Linux and MacOS in terminal
-
-Install script using `curl`
-
-```bash
-curl -O https://raw.githubusercontent.com/UiASub/K2-Zephyr/main/install_zephyr.sh
-chmod +x install_zephyr.sh
-./install_zephyr.sh
-```
-
-use `./install_zephyr.sh -h` to see help
+- configures the `vesc-uart` device at 115200 8N1
+- sends VESC `COMM_GET_VALUES` once per second
+- sends a zero-duty `COMM_SET_DUTY` frame every fifth query
+- logs every TX and RX byte sequence as a hex dump on the console
 
 ## Building
 
-The supported target is H7 (`nucleo_h755zi_q/stm32h755xx/m7`). The build
-scripts default to an MCUboot-enabled OTA build.
-
 ```bash
 ./build.sh
+./build.sh --f7
 ./build.sh --h7
-./build.sh --ota
-./build.sh --no-ota
+./build.sh --esp32-supermini
 ```
 
 On Windows:
 
 ```powershell
 .\build.ps1
+.\build.ps1 --F7
 .\build.ps1 --H7
-.\build.ps1 --OTA
-.\build.ps1 --NO-OTA
+.\build.ps1 --esp32-supermini
 ```
 
-Use `--no-ota` only when you intentionally need a plain non-MCUboot development
-image. F7 Nucleo support is sunset and is no longer documented or built by the
-project tooling.
+The default target is F7 (`nucleo_f767zi`).
 
-## Ethernet OTA
+## UART Wiring
 
-The normal K2 firmware update path is MCUboot-based Ethernet OTA using dual
-image slots and MCUmgr over UDP.
+F7 and H7 use the existing `vesc-uart` alias on USART6:
 
-Build an OTA image with:
+- TX: PC6 / D1
+- RX: PC7 / D0
 
-```bash
-./build.sh
-```
+ESP32-C3 SuperMini uses UART1 while keeping logs on USB serial:
 
-On Windows:
-
-```powershell
-.\build.ps1
-```
-
-This creates a sysbuild output with:
-
-- MCUboot in `build-h755-ota/mcuboot`
-- The signed application image in `build-h755-ota/K2-Zephyr/zephyr/zephyr.signed.bin`
-
-Flash the OTA build over USB only for first-time provisioning or recovery:
-
-```bash
-west flash -d build-h755-ota
-```
-
-After the board has been provisioned, upload `zephyr.signed.bin` with an
-MCUmgr-compatible UDP client to the device on port `1337`, mark the image for
-test boot, and reset the device.
-The application confirms the new image automatically after it finishes startup
-and the network interface is up. If the new image fails to boot or is rebooted
-before confirmation, MCUboot reverts to the previous image on the next reset.
-The helper wraps the normal upload/test/reset flow:
-
-```bash
-./tools/k2-ota.sh
-```
-
-See [Ethernet OTA setup](ETHERNET_OTA.md) for direct-link network setup,
-manual Fedora and Windows steps, and validation notes.
-
-## Release
-
-To create a new release, push a tag:
-
-```bash
-git tag v0.X.X
-git push origin v0.X.X
-```
-
-This triggers the GitHub Actions workflow to build and release the firmware.
+- TX: GPIO21
+- RX: GPIO20

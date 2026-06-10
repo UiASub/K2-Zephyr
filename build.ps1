@@ -5,21 +5,13 @@ $projectPath = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 $workspace = Split-Path -Parent $projectPath
 $venvActivateWindows = Join-Path -Path $workspace -ChildPath '.venv\Scripts\Activate.ps1'
 $venvActivateUnix = Join-Path -Path $workspace -ChildPath '.venv/bin/Activate.ps1'
-$board = 'nucleo_h755zi_q/stm32h755xx/m7'
-$boardLabel = 'H7 (nucleo_h755zi_q/stm32h755xx/m7)'
-$otaBuild = $true
+$board = 'nucleo_f767zi'
+$boardLabel = 'F7 (nucleo_f767zi)'
+$buildDir = 'build-f767-esc-debug'
 
 function Show-Usage {
-    Write-Host 'Usage: .\build.ps1 [--h7|--H7] [--ota|--OTA] [--no-ota|--NO-OTA]'
-    Write-Host 'Defaults to the H7 OTA build. Use --no-ota only for a plain non-MCUboot development build.'
-}
-
-function Show-FlashGuidance {
-    Write-Host ''
-    Write-Host 'K2 flashing:'
-    Write-Host '  Ignore Zephyr''s generic "west flash" hint unless you are doing first-time USB'
-    Write-Host '  provisioning or debug recovery.'
-    Write-Host '  Normal updates should use: .\tools\k2-ota.ps1'
+    Write-Host 'Usage: .\build.ps1 [--f7|--F7|--h7|--H7|--esp32-supermini]'
+    Write-Host 'Builds the minimal ESC UART debug firmware. Defaults to F7.'
 }
 
 function Invoke-West {
@@ -32,16 +24,19 @@ function Invoke-West {
 foreach ($arg in $args) {
     switch ($arg.ToLowerInvariant()) {
         '--h7' {
+            $board = 'nucleo_h755zi_q/stm32h755xx/m7'
+            $boardLabel = 'H7 (nucleo_h755zi_q/stm32h755xx/m7)'
+            $buildDir = 'build-h755-esc-debug'
         }
         '--f7' {
-            Write-Host "F7 support has been sunset. Use the H7 target: $board"
-            exit 1
+            $board = 'nucleo_f767zi'
+            $boardLabel = 'F7 (nucleo_f767zi)'
+            $buildDir = 'build-f767-esc-debug'
         }
-        '--ota' {
-            $otaBuild = $true
-        }
-        '--no-ota' {
-            $otaBuild = $false
+        { $_ -in '--esp32-supermini', '--esp32c3-supermini', '--esp32' } {
+            $board = 'esp32c3_supermini'
+            $boardLabel = 'ESP32-C3 SuperMini (esp32c3_supermini)'
+            $buildDir = 'build-esp32c3-supermini-esc-debug'
         }
         '--help' {
             Show-Usage
@@ -65,17 +60,7 @@ if (Test-Path $venvActivateWindows) {
 }
 
 Set-Location $projectPath
-if ($otaBuild) {
-    $buildDir = 'build-h755-ota'
-    Write-Host "Building K2-Zephyr OTA image for $boardLabel..."
-    Invoke-West build --sysbuild -p -b $board -d $buildDir $projectPath -- "-DEXTRA_CONF_FILE=ota.conf"
-    Write-Host "OTA build complete for $boardLabel."
-    Write-Host "Signed image: $buildDir\*\zephyr\zephyr.signed.bin"
-    Show-FlashGuidance
-} else {
-    $buildDir = 'build-h755'
-    Write-Host "Building K2-Zephyr non-OTA image for $boardLabel..."
-    Invoke-West build -p -b $board -d $buildDir $projectPath
-    Write-Host "Non-OTA build complete for $boardLabel."
-    Write-Host "Use west flash -d $buildDir only when you intentionally need USB flashing."
-}
+Write-Host "Building minimal ESC debug firmware for $boardLabel..."
+Invoke-West build -p -b $board -d $buildDir $projectPath
+Write-Host "ESC debug build complete for $boardLabel."
+Write-Host "Flash with: west flash -d $buildDir"
