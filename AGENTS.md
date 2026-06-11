@@ -73,7 +73,9 @@ documented in `PINOUT.md`.
 
 - Ethernet: static IPv4 `10.77.0.2/24`.
 - Topside/broadcast destination: `10.77.0.255`.
-- VESC UART: `USART6`, TX PC6, RX PC7, 115200 baud.
+- VESC UART: `LPUART1`, TX PB6 / Arduino D1, RX PB7 / Arduino D0,
+  115200 baud. This mapping is based on the working
+  `tests/vesc_uart_duty` hardware test.
 - VN-100S IMU: `SPI3`, SCK PC10, MISO PC11, MOSI PC12, CS PA4.
 - Optional SSD1306 OLED: `I2C4`, SCL PD12, SDA PD13. Disabled by default with
   `CONFIG_K2_OLED=n`; `src/display/oled.h` provides stubs.
@@ -134,8 +136,8 @@ Core control is in `src/control.c`.
 - `src/vesc/vesc_protocol.c` builds VESC binary packets:
   - `COMM_SET_DUTY`
   - `COMM_CAN_FORWARD`
-- `src/vesc/vesc_uart_zephyr.c` uses interrupt-driven UART TX with a ring
-  buffer.
+- `src/vesc/vesc_uart_zephyr.c` uses polling UART TX, matching the
+  `tests/vesc_uart_duty` path that verified VESC communication on PB6/PB7.
 
 ## IMU And Axis Configuration
 
@@ -188,4 +190,3 @@ Core control is in `src/control.c`.
   `boards/nucleo_h755zi_q_stm32h755xx_m7.overlay` and `PINOUT.md`.
 - Change OTA/build flow: `build.ps1`, `build.sh`, `ota.conf`,
   `sysbuild.conf`, `ETHERNET_OTA.md`.
-

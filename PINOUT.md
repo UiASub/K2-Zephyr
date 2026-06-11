@@ -16,10 +16,10 @@
 ## ESC Control - UART
 | Function | Pin | Nucleo Label | Baud | Direction |
 |----------|-----|--------------|------|-----------|
-| TX       | PC6 | D1 (CN10.2)  | 115200 | Output    |
-| RX       | PC7 | D0 (CN10.1)  | 115200 | Input     |
+| TX       | PB6 | D1           | 115200 | Output to VESC RX |
+| RX       | PB7 | D0           | 115200 | Input from VESC TX |
 
-**Device**: USART6
+**Device**: LPUART1
 **Protocol**: VESC binary protocol
 
 ---

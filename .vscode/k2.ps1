@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory=$true)]
-    [ValidateSet("check", "build-no-ota", "build-ota", "flash-no-ota", "flash-ota", "build-uart-loopback", "flash-uart-loopback", "build-vesc-uart-duty", "flash-vesc-uart-duty")]
+    [ValidateSet("check", "build-no-ota", "build-ota", "flash-no-ota", "flash-ota", "build-uart-loopback", "flash-uart-loopback", "build-vesc-uart-duty", "flash-vesc-uart-duty", "build-vesc-all-duty", "flash-vesc-all-duty")]
     [string]$Action
 )
 
@@ -73,5 +73,13 @@ switch ($Action) {
 
     "flash-vesc-uart-duty" {
         west flash -d build-vesc-uart-duty
+    }
+
+    "build-vesc-all-duty" {
+        west build -p -b nucleo_h755zi_q/stm32h755xx/m7 -d build-vesc-all-duty tests/vesc_all_duty
+    }
+
+    "flash-vesc-all-duty" {
+        west flash -d build-vesc-all-duty
     }
 }
