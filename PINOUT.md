@@ -53,5 +53,16 @@ A single PWM signal drives the external LED driver that powers both light LEDs.
 
 ---
 
+## Manipulator - PWM
+| Function | Pin | Connector | Timer | Direction |
+|----------|-----|-----------|-------|-----------|
+| PWM      | PD15 | D9 / ST Morpho | TIM4_CH4 | Output |
+
+**Frequency**: 200 Hz
+**Control**: signed manipulator command byte `-128..127` maps to a 1000-2000 us pulse, with 1500 us neutral.
+TIM4_CH4/PD15 is separate from the enabled UART, SPI, I2C, Ethernet, and light PWM pins.
+
+---
+
 ## Notes
 - All pins are on STM32H755ZI (Nucleo-144 board).

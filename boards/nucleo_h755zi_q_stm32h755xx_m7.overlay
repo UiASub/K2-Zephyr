@@ -84,11 +84,28 @@
     };
 };
 
+/* Manipulator PWM: TIM4_CH4 on PD15 (D9).
+ * TIM4 is not used by the enabled UART, SPI, I2C, Ethernet, or light PWM.
+ */
+&timers4 {
+    st,prescaler = <128>;
+    status = "okay";
+
+    pwm4: pwm {
+        status = "okay";
+        pinctrl-0 = <&tim4_ch4_pd15>;
+        pinctrl-names = "default";
+    };
+};
+
 / {
     pwmleds {
         compatible = "pwm-leds";
         rov_light: rov_light {
             pwms = <&pwm15 1 PWM_MSEC(1) PWM_POLARITY_NORMAL>;
+        };
+        rov_manipulator_pwm: rov_manipulator_pwm {
+            pwms = <&pwm4 4 PWM_HZ(200) PWM_POLARITY_NORMAL>;
         };
     };
 };
