@@ -12,7 +12,7 @@
 
 LOG_MODULE_REGISTER(rov_control, LOG_LEVEL_INF);
 
-/* Dimmable light output (TIM1_CH1 / D6 / PA8 → external LED driver). */
+/* Dimmable light output (TIM15_CH1 / PE5 -> external LED driver). */
 static const struct pwm_dt_spec light_pwm = PWM_DT_SPEC_GET(DT_NODELABEL(rov_light));
 
 /* ---------------------------------------------------------------------------
