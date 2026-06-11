@@ -28,13 +28,13 @@
     };
 };
 
-/* Enable USART6 for VESC communication
- * TX = PC6 (D1 on CN10 pin 2)
- * RX = PC7 (D0 on CN10 pin 1)
+/* Enable USART1 for VESC communication
+ * TX = PB6
+ * RX = PB7
  */
-&usart6 {
+&usart1 {
     status = "okay";
-    pinctrl-0 = <&usart6_tx_pc6 &usart6_rx_pc7>;
+    pinctrl-0 = <&usart1_tx_pb6 &usart1_rx_pb7>;
     pinctrl-names = "default";
     current-speed = <115200>;
 };
@@ -47,7 +47,7 @@
 /* Create Bit-Bang SPI Controller */
 / {
     aliases {
-        vesc-uart = &usart6;
+        vesc-uart = &usart1;
         vn100s = &vn100s;
     };
 
