@@ -1,0 +1,11 @@
+/* MS5837-30BA depth sensor on bit-banged I2C.
+ *
+ * PB8 = SCL
+ * PB9 = SDA
+ *
+ * The hardware I2C controller did not become ready at 10 kHz, so this test
+ * intentionally uses GPIO open-drain bit-banging for slow bring-up.
+ */
+&i2c1 {
+    status = "disabled";
+};
