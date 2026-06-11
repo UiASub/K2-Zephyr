@@ -43,12 +43,12 @@
 ---
 
 ## Light (Dimmable LED driver) - PWM
-| Function | Pin | Nucleo Label | Timer | Direction |
-|----------|-----|--------------|-------|-----------|
-| PWM      | PA8 | D6           | TIM1_CH1 | Output |
+| Function | Pin | Connector | Timer | Direction |
+|----------|-----|-----------|-------|-----------|
+| PWM      | PE5 | ST Morpho | TIM15_CH1 | Output |
 
 **Frequency**: 1 kHz
-**Control**: brightness 0-255 from the command packet `light` byte → duty cycle.
+**Control**: brightness 0-255 from the command packet `light` byte -> duty cycle.
 A single PWM signal drives the external LED driver that powers both light LEDs.
 
 ---
