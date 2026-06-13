@@ -31,6 +31,7 @@
 #include "net/system_control.h"
 #include "net/ota_confirm.h"
 #include "display/oled.h"
+#include "pinger/pinger_adc.h"
 
 /* Defined in net/log_backend_udp.c */
 void log_backend_udp_topside_start(void);
@@ -62,6 +63,9 @@ int main(void)
     
     // Initialize ROV control system
     rov_control_init();
+
+    // Start pinger ADC test thread
+    pinger_adc_start();
 
     // Initialize networking
     network_init();

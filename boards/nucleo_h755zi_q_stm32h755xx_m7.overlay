@@ -1,5 +1,6 @@
 #include "nucleo_h755zi_q_stm32h755xx_m7_partitions.overlay"
 #include <zephyr/dt-bindings/pwm/pwm.h>
+#include <zephyr/dt-bindings/adc/stm32_adc.h>
 
 /* Enable LPUART1 for VESC communication
  * TX = PB6
@@ -107,5 +108,29 @@
         rov_manipulator_pwm: rov_manipulator_pwm {
             pwms = <&pwm4 4 PWM_HZ(200) PWM_POLARITY_NORMAL>;
         };
+    };
+};
+
+
+/ {
+    zephyr,user {
+        io-channels = <&adc1 15>;
+    };
+};
+
+&adc1 {
+    status = "okay";
+    #address-cells = <1>;
+    #size-cells = <0>;
+
+    st,adc-clock-source = "SYNC";
+    st,adc-prescaler = <4>;
+
+    channel@f {
+        reg = <15>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_INTERNAL";
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+        zephyr,resolution = <12>;
     };
 };
