@@ -31,7 +31,7 @@ LOG_MODULE_REGISTER(pinger_adc, LOG_LEVEL_INF);
 #define SAMPLE_PERIOD_US    10
 #define N_SAMPLES           256
 
-#define DETECT_RATIO_X10    100   /* 100 = 10.0x power ratio */
+#define DETECT_RATIO_X10    30   /* 100 = 10.0x power ratio */
 
 /*
  * Goertzel coefficients in Q15 fixed point:
