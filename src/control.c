@@ -136,12 +136,124 @@ static float depth_sensor_read(void)
 /* ---------------------------------------------------------------------------
  * Sync PID gains from the UDP-configurable store
  * --------------------------------------------------------------------------- */
-static void sync_pid_gains(void)
+static void sync_pid_gains(float gains_snapshot[18], uint8_t *active_mask)
 {
+    uint8_t mask = 0;
+
     for (int i = 0; i < PID_AXIS_COUNT; i++) {
         pid_gains_t g = pid_config_get_gains((enum pid_axis)i);
         pid_set_gains(&pid[i], g.kp, g.ki, g.kd);
+        gains_snapshot[(i * 3) + 0] = g.kp;
+        gains_snapshot[(i * 3) + 1] = g.ki;
+        gains_snapshot[(i * 3) + 2] = g.kd;
+        if (g.kp != 0.0f || g.ki != 0.0f || g.kd != 0.0f) {
+            mask |= (uint8_t)(1U << i);
+        }
     }
+
+    if (active_mask) {
+        *active_mask = mask;
+    }
+}
+
+static void read_pilot_snapshot(int8_t axes[6], uint8_t *light, int8_t *manipulator)
+{
+    k_mutex_lock(&pilot_mutex, K_FOREVER);
+    axes[0] = pilot.surge;
+    axes[1] = pilot.sway;
+    axes[2] = pilot.heave;
+    axes[3] = pilot.roll;
+    axes[4] = pilot.pitch;
+    axes[5] = pilot.yaw;
+    *light = pilot.light;
+    *manipulator = pilot.manipulator;
+    k_mutex_unlock(&pilot_mutex);
+}
+
+static uint32_t command_age_ms(int64_t now)
+{
+    if (last_cmd_time <= 0) {
+        return (uint32_t)now;
+    }
+
+    return (uint32_t)(now - last_cmd_time);
+}
+
+static void publish_control_telemetry(const float setpoint[6],
+                                      const float measurement[6],
+                                      const float output[6],
+                                      const float error[6],
+                                      const float gains[18],
+                                      const int8_t pilot_axes[6],
+                                      uint8_t light,
+                                      int8_t manipulator_command,
+                                      uint8_t override_mask_snapshot,
+                                      uint8_t pid_active_mask,
+                                      uint8_t extra_flags,
+                                      int64_t now)
+{
+    uint8_t flags = extra_flags;
+
+    if (override_mask_snapshot) {
+        flags |= CONTROL_TELEM_FLAG_OVERRIDE;
+    }
+    if (pid_active_mask) {
+        flags |= CONTROL_TELEM_FLAG_PID;
+    }
+
+    k_mutex_lock(&ctrl_telem_mutex, K_FOREVER);
+    ctrl_telem.uptime_ms = (uint32_t)now;
+    ctrl_telem.last_command_age_ms = command_age_ms(now);
+    ctrl_telem.flags = flags;
+    ctrl_telem.override_mask = override_mask_snapshot;
+    ctrl_telem.pid_active_mask = pid_active_mask;
+    memcpy(ctrl_telem.pilot, pilot_axes, sizeof(ctrl_telem.pilot));
+    ctrl_telem.light = light;
+    ctrl_telem.manipulator_command = manipulator_command;
+    memcpy(ctrl_telem.setpoint, setpoint, sizeof(ctrl_telem.setpoint));
+    memcpy(ctrl_telem.measurement, measurement, sizeof(ctrl_telem.measurement));
+    memcpy(ctrl_telem.output, output, sizeof(ctrl_telem.output));
+    memcpy(ctrl_telem.error, error, sizeof(ctrl_telem.error));
+    memcpy(ctrl_telem.gains, gains, sizeof(ctrl_telem.gains));
+    k_mutex_unlock(&ctrl_telem_mutex);
+}
+
+static void publish_timeout_telemetry(int64_t now)
+{
+    const float zero_axes[6] = {0};
+    float measurement[6] = {0};
+    float gains_snapshot[18] = {0};
+    int8_t pilot_axes[6];
+    uint8_t light;
+    int8_t manipulator;
+    uint8_t override_mask_snapshot;
+    uint8_t pid_active_mask = 0;
+    float raw_yaw, raw_pitch, raw_roll;
+    float yaw_meas, pitch_meas, roll_meas;
+
+    vn100s_get_ypr(&raw_yaw, &raw_pitch, &raw_roll);
+    axis_config_remap_ypr(raw_yaw, raw_pitch, raw_roll,
+                          &yaw_meas, &pitch_meas, &roll_meas);
+
+    measurement[0] = est_speed[0];
+    measurement[1] = est_speed[1];
+    measurement[2] = -depth_sensor_read();
+    measurement[3] = roll_meas;
+    measurement[4] = -pitch_meas;
+    measurement[5] = yaw_meas;
+
+    read_pilot_snapshot(pilot_axes, &light, &manipulator);
+
+    k_mutex_lock(&override_mutex, K_FOREVER);
+    override_mask_snapshot = override_mask;
+    k_mutex_unlock(&override_mutex);
+
+    sync_pid_gains(gains_snapshot, &pid_active_mask);
+
+    publish_control_telemetry(zero_axes, measurement, zero_axes, zero_axes,
+                              gains_snapshot, pilot_axes, light, manipulator,
+                              override_mask_snapshot, pid_active_mask,
+                              CONTROL_TELEM_FLAG_TIMEOUT, now);
 }
 
 /* ---------------------------------------------------------------------------
@@ -153,7 +265,10 @@ static void stabilise(float out[6])
 {
     /* Per-axis snapshots for telemetry (populated alongside each PID call) */
     float sp_snap[6] = {0};
+    float meas_snap[6] = {0};
     float err_snap[6] = {0};
+    float gains_snap[18] = {0};
+    uint8_t pid_active_mask = 0;
 
     /* ---- Read sensors ---- */
     float raw_yaw, raw_pitch, raw_roll;
@@ -197,17 +312,16 @@ static void stabilise(float out[6])
     }
 
     float depth_meas = depth_sensor_read();
+    meas_snap[2] = -depth_meas;
+    meas_snap[3] = roll_meas;
+    meas_snap[4] = -pitch_meas;
+    meas_snap[5] = yaw_meas;
 
     /* ---- Grab pilot stick snapshot ---- */
-    int8_t p_surge, p_sway, p_heave, p_roll, p_pitch, p_yaw;
-    k_mutex_lock(&pilot_mutex, K_FOREVER);
-    p_surge = pilot.surge;
-    p_sway  = pilot.sway;
-    p_heave = pilot.heave;
-    p_roll  = pilot.roll;
-    p_pitch = pilot.pitch;
-    p_yaw   = pilot.yaw;
-    k_mutex_unlock(&pilot_mutex);
+    int8_t p_axes[6];
+    uint8_t p_light;
+    int8_t p_manipulator;
+    read_pilot_snapshot(p_axes, &p_light, &p_manipulator);
 
     /* ---- Grab setpoint override snapshot ---- */
     uint8_t ovr_mask;
@@ -218,7 +332,7 @@ static void stabilise(float out[6])
     k_mutex_unlock(&override_mutex);
 
     /* ---- Sync latest PID gains from topside ---- */
-    sync_pid_gains();
+    sync_pid_gains(gains_snap, &pid_active_mask);
 
     /* ================================================================
      *  ROLL / PITCH / YAW  —  angle-tracking PID
@@ -235,12 +349,12 @@ static void stabilise(float out[6])
         out[3] = pid_compute(&pid[PID_ROLL], sp, roll_meas, CONTROL_DT);
         sp_snap[3] = sp;  err_snap[3] = sp - roll_meas;
     } else if (pid_is_disabled(&pid[PID_ROLL])) {
-        out[3] = stick_normalize(p_roll);
+        out[3] = stick_normalize(p_axes[PID_ROLL]);
         angle_setpoint[0] = roll_meas;
         pid_reset(&pid[PID_ROLL]);
         sp_snap[3] = out[3];  err_snap[3] = 0.0f;
     } else {
-        angle_setpoint[0] += stick_normalize(p_roll) * MAX_RATE_DPS * CONTROL_DT;
+        angle_setpoint[0] += stick_normalize(p_axes[PID_ROLL]) * MAX_RATE_DPS * CONTROL_DT;
         float sp = roll_meas + wrap_180(angle_setpoint[0] - roll_meas);
         out[3] = pid_compute(&pid[PID_ROLL], sp, roll_meas, CONTROL_DT);
         sp_snap[3] = sp;  err_snap[3] = sp - roll_meas;
@@ -254,12 +368,12 @@ static void stabilise(float out[6])
         out[4] = pid_compute(&pid[PID_PITCH], sp, meas, CONTROL_DT);
         sp_snap[4] = sp;  err_snap[4] = sp - meas;
     } else if (pid_is_disabled(&pid[PID_PITCH])) {
-        out[4] = stick_normalize(p_pitch);
+        out[4] = stick_normalize(p_axes[PID_PITCH]);
         angle_setpoint[1] = -pitch_meas;
         pid_reset(&pid[PID_PITCH]);
         sp_snap[4] = out[4];  err_snap[4] = 0.0f;
     } else {
-        angle_setpoint[1] += stick_normalize(p_pitch) * MAX_RATE_DPS * CONTROL_DT;
+        angle_setpoint[1] += stick_normalize(p_axes[PID_PITCH]) * MAX_RATE_DPS * CONTROL_DT;
         float meas = -pitch_meas;
         float sp = meas + wrap_180(angle_setpoint[1] - meas);
         out[4] = pid_compute(&pid[PID_PITCH], sp, meas, CONTROL_DT);
@@ -274,12 +388,12 @@ static void stabilise(float out[6])
         out[5] = pid_compute(&pid[PID_YAW], sp, yaw_meas, CONTROL_DT);
         sp_snap[5] = sp;  err_snap[5] = sp - yaw_meas;
     } else if (pid_is_disabled(&pid[PID_YAW])) {
-        out[5] = stick_normalize(p_yaw);
+        out[5] = stick_normalize(p_axes[PID_YAW]);
         angle_setpoint[2] = yaw_meas;
         pid_reset(&pid[PID_YAW]);
         sp_snap[5] = out[5];  err_snap[5] = 0.0f;
     } else {
-        angle_setpoint[2] += stick_normalize(p_yaw) * MAX_RATE_DPS * CONTROL_DT;
+        angle_setpoint[2] += stick_normalize(p_axes[PID_YAW]) * MAX_RATE_DPS * CONTROL_DT;
         angle_setpoint[2] = wrap_180(angle_setpoint[2]);
         float sp = yaw_meas + wrap_180(angle_setpoint[2] - yaw_meas);
         out[5] = pid_compute(&pid[PID_YAW], sp, yaw_meas, CONTROL_DT);
@@ -298,6 +412,8 @@ static void stabilise(float out[6])
     /* Update estimated speeds (leaky integrator to limit drift) */
     est_speed[0] = est_speed[0] * SPEED_DECAY + ax * CONTROL_DT;
     est_speed[1] = est_speed[1] * SPEED_DECAY + ay * CONTROL_DT;
+    meas_snap[0] = est_speed[0];
+    meas_snap[1] = est_speed[1];
 
     /* Surge */
     if (ovr_mask & (1 << PID_SURGE)) {
@@ -305,12 +421,12 @@ static void stabilise(float out[6])
         out[0] = pid_compute(&pid[PID_SURGE], sp, est_speed[0], CONTROL_DT);
         sp_snap[0] = sp;  err_snap[0] = sp - est_speed[0];
     } else if (pid_is_disabled(&pid[PID_SURGE])) {
-        out[0] = stick_normalize(p_surge);
+        out[0] = stick_normalize(p_axes[PID_SURGE]);
         est_speed[0] = 0.0f;
         pid_reset(&pid[PID_SURGE]);
         sp_snap[0] = out[0];  err_snap[0] = 0.0f;
     } else {
-        float sp = stick_normalize(p_surge) * MAX_SPEED_MPS;
+        float sp = stick_normalize(p_axes[PID_SURGE]) * MAX_SPEED_MPS;
         out[0] = pid_compute(&pid[PID_SURGE], sp, est_speed[0], CONTROL_DT);
         sp_snap[0] = sp;  err_snap[0] = sp - est_speed[0];
     }
@@ -321,12 +437,12 @@ static void stabilise(float out[6])
         out[1] = pid_compute(&pid[PID_SWAY], sp, est_speed[1], CONTROL_DT);
         sp_snap[1] = sp;  err_snap[1] = sp - est_speed[1];
     } else if (pid_is_disabled(&pid[PID_SWAY])) {
-        out[1] = stick_normalize(p_sway);
+        out[1] = stick_normalize(p_axes[PID_SWAY]);
         est_speed[1] = 0.0f;
         pid_reset(&pid[PID_SWAY]);
         sp_snap[1] = out[1];  err_snap[1] = 0.0f;
     } else {
-        float sp = stick_normalize(p_sway) * MAX_SPEED_MPS;
+        float sp = stick_normalize(p_axes[PID_SWAY]) * MAX_SPEED_MPS;
         out[1] = pid_compute(&pid[PID_SWAY], sp, est_speed[1], CONTROL_DT);
         sp_snap[1] = sp;  err_snap[1] = sp - est_speed[1];
     }
@@ -345,22 +461,20 @@ static void stabilise(float out[6])
         out[2] = pid_compute(&pid[PID_HEAVE], depth_setpoint, -depth_meas, CONTROL_DT);
         sp_snap[2] = depth_setpoint;  err_snap[2] = depth_setpoint - (-depth_meas);
     } else if (pid_is_disabled(&pid[PID_HEAVE])) {
-        out[2] = stick_normalize(p_heave);
+        out[2] = stick_normalize(p_axes[PID_HEAVE]);
         depth_setpoint = -depth_meas;
         pid_reset(&pid[PID_HEAVE]);
         sp_snap[2] = out[2];  err_snap[2] = 0.0f;
     } else {
-        depth_setpoint += stick_normalize(p_heave) * MAX_DEPTH_RATE_MPS * CONTROL_DT;
+        depth_setpoint += stick_normalize(p_axes[PID_HEAVE]) * MAX_DEPTH_RATE_MPS * CONTROL_DT;
         out[2] = pid_compute(&pid[PID_HEAVE], depth_setpoint, -depth_meas, CONTROL_DT);
         sp_snap[2] = depth_setpoint;  err_snap[2] = depth_setpoint - (-depth_meas);
     }
 
-    /* Publish telemetry snapshot */
-    k_mutex_lock(&ctrl_telem_mutex, K_FOREVER);
-    memcpy(ctrl_telem.setpoint, sp_snap, sizeof(sp_snap));
-    memcpy(ctrl_telem.output, out, sizeof(ctrl_telem.output));
-    memcpy(ctrl_telem.error, err_snap, sizeof(err_snap));
-    k_mutex_unlock(&ctrl_telem_mutex);
+    publish_control_telemetry(sp_snap, meas_snap, out, err_snap,
+                              gains_snap, p_axes, p_light, p_manipulator,
+                              ovr_mask, pid_active_mask, 0,
+                              k_uptime_get());
 }
 
 /* ---------------------------------------------------------------------------
@@ -448,6 +562,7 @@ static void rov_control_thread(void *arg1, void *arg2, void *arg3)
             thruster_calculate_6dof(zeros, &output);
             thruster_send_outputs(&output);
             rov_set_manipulator(0);
+            publish_timeout_telemetry(now);
             if (!timed_out) {
                 timed_out = true;
                 LOG_WRN("Comms timeout — thrusters killed");
@@ -546,6 +661,7 @@ void rov_control_init(void)
     }
 
     k_mutex_lock(&ctrl_telem_mutex, K_FOREVER);
+    memset(&ctrl_telem, 0, sizeof(ctrl_telem));
     ctrl_telem.manipulator_deg = 0.0f;
     ctrl_telem.manipulator_pulse_us = MANIP_NEUTRAL_PULSE_US;
     k_mutex_unlock(&ctrl_telem_mutex);
