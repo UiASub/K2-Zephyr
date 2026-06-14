@@ -20,7 +20,7 @@
 static int  log_sock = -1;
 static bool in_panic = false;
 static struct sockaddr_in log_dest;
-static uint8_t log_out_buf[192];
+static uint8_t log_out_buf[512];
 static uint32_t current_format = LOG_OUTPUT_TEXT;
 
 /* Output callback — sends formatted text as a single UDP datagram */

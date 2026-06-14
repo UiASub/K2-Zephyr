@@ -16,12 +16,27 @@ typedef struct {
     int8_t manipulator;  /* Manipulator setpoint (-128 to +127) */
 } rov_command_t;
 
+/* Control telemetry flags. */
+#define CONTROL_TELEM_FLAG_TIMEOUT  (1U << 0)
+#define CONTROL_TELEM_FLAG_OVERRIDE (1U << 1)
+#define CONTROL_TELEM_FLAG_PID      (1U << 2)
+
 /* Snapshot of control loop state for topside telemetry.
  * Axis order: [surge, sway, heave, roll, pitch, yaw] */
 typedef struct {
+    uint32_t uptime_ms;
+    uint32_t last_command_age_ms;
+    uint8_t flags;
+    uint8_t override_mask;
+    uint8_t pid_active_mask;
+    int8_t pilot[6];    /* Latest raw pilot command per axis (-128..127) */
+    uint8_t light;
+    int8_t manipulator_command;
     float setpoint[6];  /* Target value per axis */
+    float measurement[6]; /* Measurement used by PID */
     float output[6];    /* PID output [-1,+1] or passthrough */
     float error[6];     /* setpoint - measurement (0 when passthrough) */
+    float gains[18];    /* kp,ki,kd for each axis */
     float manipulator_deg;
     uint16_t manipulator_pulse_us;
 } control_telemetry_t;

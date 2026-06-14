@@ -52,10 +52,21 @@ static void ctrl_telem_thread(void *a, void *b, void *c)
         control_get_telemetry(&snap);
 
         control_telem_packet_t pkt;
+        memset(&pkt, 0, sizeof(pkt));
         pkt.sequence = htonl(telem_seq);
+        pkt.uptime_ms = htonl(snap.uptime_ms);
+        pkt.last_command_age_ms = htonl(snap.last_command_age_ms);
+        pkt.flags = snap.flags;
+        pkt.override_mask = snap.override_mask;
+        pkt.pid_active_mask = snap.pid_active_mask;
+        memcpy(pkt.pilot, snap.pilot, sizeof(pkt.pilot));
+        pkt.light = snap.light;
+        pkt.manipulator_command = snap.manipulator_command;
         memcpy(pkt.setpoint, snap.setpoint, sizeof(pkt.setpoint));
+        memcpy(pkt.measurement, snap.measurement, sizeof(pkt.measurement));
         memcpy(pkt.output, snap.output, sizeof(pkt.output));
         memcpy(pkt.error, snap.error, sizeof(pkt.error));
+        memcpy(pkt.gains, snap.gains, sizeof(pkt.gains));
         pkt.manipulator_deg = snap.manipulator_deg;
         pkt.manipulator_pulse_us = snap.manipulator_pulse_us;
 
