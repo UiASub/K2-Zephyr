@@ -22,9 +22,9 @@ LOG_MODULE_REGISTER(pinger_adc, LOG_LEVEL_INF);
  * Goertzel bin spacing:
  * fs / N = 100000 / 256 = 390.625 Hz/bin
  *
- * 30 kHz target:
- * k = round(30000 / 390.625) = 77
- * actual bin = 77 * 390.625 = 30078 Hz
+ * 20 kHz test target:
+ * k = round(20000 / 390.625) = 51
+ * actual bin = 51 * 390.625 = 19922 Hz
  */
 
 #define SAMPLE_RATE_HZ      100000
@@ -37,13 +37,13 @@ LOG_MODULE_REGISTER(pinger_adc, LOG_LEVEL_INF);
  * Goertzel coefficients in Q15 fixed point:
  * coeff = 2*cos(2*pi*k/N) * 32768
  *
+ * k=38 -> 14.844 kHz
+ * k=51 -> 19.922 kHz
  * k=64 -> 25.000 kHz
- * k=77 -> 30.078 kHz
- * k=90 -> 35.156 kHz
  */
+#define GOERTZEL_COEFF_15K_Q15   39040
+#define GOERTZEL_COEFF_20K_Q15   20557
 #define GOERTZEL_COEFF_25K_Q15   0
-#define GOERTZEL_COEFF_30K_Q15  -20557
-#define GOERTZEL_COEFF_35K_Q15  -39040
 
 static const struct adc_dt_spec adc_chan =
     ADC_DT_SPEC_GET_BY_IDX(ADC_NODE, 0);
@@ -149,7 +149,7 @@ static void pinger_adc_thread(void *arg1, void *arg2, void *arg3)
     }
 
     LOG_INF("Pinger detector started: target=%d Hz, fs=%d Hz, N=%d",
-            30000, SAMPLE_RATE_HZ, N_SAMPLES);
+            20000, SAMPLE_RATE_HZ, N_SAMPLES);
 
     while (1) {
         ret = collect_samples();
@@ -159,23 +159,23 @@ static void pinger_adc_thread(void *arg1, void *arg2, void *arg3)
             continue;
         }
 
+        uint64_t p15 = goertzel_power_q15(samples, N_SAMPLES, GOERTZEL_COEFF_15K_Q15);
+        uint64_t p20 = goertzel_power_q15(samples, N_SAMPLES, GOERTZEL_COEFF_20K_Q15);
         uint64_t p25 = goertzel_power_q15(samples, N_SAMPLES, GOERTZEL_COEFF_25K_Q15);
-        uint64_t p30 = goertzel_power_q15(samples, N_SAMPLES, GOERTZEL_COEFF_30K_Q15);
-        uint64_t p35 = goertzel_power_q15(samples, N_SAMPLES, GOERTZEL_COEFF_35K_Q15);
 
-        uint64_t noise = (p25 + p35) / 2U;
+        uint64_t noise = (p15 + p25) / 2U;
 
         if (noise == 0) {
             noise = 1;
         }
 
-        uint64_t ratio_x10 = (p30 * 10U) / noise;
+        uint64_t ratio_x10 = (p20 * 10U) / noise;
         bool detected = ratio_x10 >= DETECT_RATIO_X10;
 
-        LOG_INF("Pinger 30k: P25=%llu P30=%llu P35=%llu ratio=%llu.%01llu %s",
+        LOG_INF("Pinger TEST 20k: P15=%llu P20=%llu P25=%llu ratio=%llu.%01llu %s",
+                (unsigned long long)p15,
+                (unsigned long long)p20,
                 (unsigned long long)p25,
-                (unsigned long long)p30,
-                (unsigned long long)p35,
                 (unsigned long long)(ratio_x10 / 10U),
                 (unsigned long long)(ratio_x10 % 10U),
                 detected ? "DETECTED" : "");
