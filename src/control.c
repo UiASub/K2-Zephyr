@@ -6,6 +6,7 @@
 #include "pid/pid_controller.h"
 #include "pid/pid_config.h"
 #include "imu/axis_config.h"
+#include "imu/quat_math.h"
 #include "imu/vn100s.h"
 #include "vesc/thruster_mapping.h"
 #include "vesc/vesc_uart_zephyr.h"
@@ -335,72 +336,138 @@ static void stabilise(float out[6])
     sync_pid_gains(gains_snap, &pid_active_mask);
 
     /* ================================================================
-     *  ROLL / PITCH / YAW  —  angle-tracking PID
+     *  ROLL / PITCH / YAW  —  quaternion-error PID
      *
-     *  Stick → rate (deg/s) → integrate → angle setpoint
-     *  PID(angle_error) → output
-     *  Bypass if gains == 0: passthrough raw stick
+     *  Setpoints accumulated in Euler (deg) for stick ergonomics, then
+     *  packed into a target quaternion. The body-frame rotation that
+     *  takes current attitude to setpoint is q_err = q_meas^-1 * q_sp;
+     *  its axis-angle vector (deg) gives a per-axis error that stays
+     *  well-defined through pitch ±90° — no Euler singularity, no
+     *  shortest-path anti-pole bang-bang.
+     *
+     *  Derivative term is the gyro body rate (deg/s), not the diff of
+     *  the angle measurement. This avoids the Euler-rate blowup near
+     *  gimbal lock and the noise amplification of numerical
+     *  differentiation.
+     *
+     *  Sign conventions preserved from the prior Euler control:
+     *    out[3] positive → roll-right command
+     *    out[4] positive → nose-down command   (RH about ROV body Y)
+     *    out[5] positive → yaw command         (RH about ROV body Z)
+     *    angle_setpoint[1] is in nose-down-positive sign so it can be
+     *    fed straight into quat_from_euler_deg.
      * ================================================================ */
 
-    /* Roll — disabled check must come first: with all-zero gains, the
-     * override branch's pid_compute() returns 0 and the pilot loses
-     * manual roll if an override is left set from a previous test. */
-    if (pid_is_disabled(&pid[PID_ROLL])) {
-        out[3] = stick_normalize(p_axes[PID_ROLL]);
-        angle_setpoint[0] = roll_meas;
-        pid_reset(&pid[PID_ROLL]);
-        sp_snap[3] = out[3];  err_snap[3] = 0.0f;
+    /* Mounting-corrected attitude quaternion (world → ROV body) */
+    quat_t q_raw;
+    vn100s_get_quat(&q_raw);
+    quat_t q_meas = axis_config_correct_quat(q_raw);
+
+    /* ROV-body Euler from the corrected quaternion. These supersede
+     * the +180°-hack values from axis_config_remap_ypr for the control
+     * path — the quaternion correction is mathematically correct at
+     * any mounting and any orientation. We still need the matching
+     * Euler for stick-integrated setpoints, telemetry, and tracking
+     * the measurement when an axis is disabled. */
+    float yaw_meas_q, pitch_meas_q, roll_meas_q;
+    quat_to_euler_deg(q_meas, &yaw_meas_q, &pitch_meas_q, &roll_meas_q);
+
+    /* Override the telemetry meas[3..5] with the ROV-body Euler so the
+     * operator sees the same convention the new controller uses (and
+     * matching whatever they set as setpoint). At small angles these
+     * are within float-noise of the +180°-hack values; at large angles
+     * the quaternion-derived ones are the truthful reading. */
+    meas_snap[3] = roll_meas_q;
+    meas_snap[4] = pitch_meas_q;
+    meas_snap[5] = yaw_meas_q;
+
+    /* Mounting-corrected body angular rates (deg/s, ROV body frame).
+     * VN-100 reg 239 returns rates in (yaw, pitch, roll) order; the
+     * correct_body_vec helper expects an (X, Y, Z) body vector so we
+     * remap to (roll, pitch, yaw) axes on the way in. */
+    float yr_imu, pr_imu, rr_imu;
+    vn100s_get_rates(&yr_imu, &pr_imu, &rr_imu);
+    float roll_rate, pitch_rate, yaw_rate;
+    axis_config_correct_body_vec(rr_imu, pr_imu, yr_imu,
+                                 &roll_rate, &pitch_rate, &yaw_rate);
+
+    bool roll_disabled  = pid_is_disabled(&pid[PID_ROLL]);
+    bool pitch_disabled = pid_is_disabled(&pid[PID_PITCH]);
+    bool yaw_disabled   = pid_is_disabled(&pid[PID_YAW]);
+
+    /* Step 1 — pick each axis's effective Euler setpoint.
+     * Disabled-check first on every axis so a stale override left over
+     * from bench testing can't hijack a stick-passthrough axis. */
+    if (roll_disabled) {
+        angle_setpoint[0] = roll_meas_q;
     } else if (ovr_mask & (1 << PID_ROLL)) {
         angle_setpoint[0] = ovr_sp[PID_ROLL];
-        float sp = roll_meas + wrap_180(angle_setpoint[0] - roll_meas);
-        out[3] = pid_compute(&pid[PID_ROLL], sp, roll_meas, CONTROL_DT);
-        sp_snap[3] = sp;  err_snap[3] = sp - roll_meas;
     } else {
         angle_setpoint[0] += stick_normalize(p_axes[PID_ROLL]) * MAX_RATE_DPS * CONTROL_DT;
-        float sp = roll_meas + wrap_180(angle_setpoint[0] - roll_meas);
-        out[3] = pid_compute(&pid[PID_ROLL], sp, roll_meas, CONTROL_DT);
-        sp_snap[3] = sp;  err_snap[3] = sp - roll_meas;
     }
 
-    /* Pitch — negate measurement: IMU positive = nose up, thruster positive = nose down */
-    if (ovr_mask & (1 << PID_PITCH)) {
+    if (pitch_disabled) {
+        angle_setpoint[1] = pitch_meas_q;
+    } else if (ovr_mask & (1 << PID_PITCH)) {
         angle_setpoint[1] = ovr_sp[PID_PITCH];
-        float meas = -pitch_meas;
-        float sp = meas + wrap_180(angle_setpoint[1] - meas);
-        out[4] = pid_compute(&pid[PID_PITCH], sp, meas, CONTROL_DT);
-        sp_snap[4] = sp;  err_snap[4] = sp - meas;
-    } else if (pid_is_disabled(&pid[PID_PITCH])) {
-        out[4] = stick_normalize(p_axes[PID_PITCH]);
-        angle_setpoint[1] = -pitch_meas;
-        pid_reset(&pid[PID_PITCH]);
-        sp_snap[4] = out[4];  err_snap[4] = 0.0f;
     } else {
         angle_setpoint[1] += stick_normalize(p_axes[PID_PITCH]) * MAX_RATE_DPS * CONTROL_DT;
-        float meas = -pitch_meas;
-        float sp = meas + wrap_180(angle_setpoint[1] - meas);
-        out[4] = pid_compute(&pid[PID_PITCH], sp, meas, CONTROL_DT);
-        sp_snap[4] = sp;  err_snap[4] = sp - meas;
     }
 
-    /* Yaw */
-    if (ovr_mask & (1 << PID_YAW)) {
-        angle_setpoint[2] = ovr_sp[PID_YAW];
-        angle_setpoint[2] = wrap_180(angle_setpoint[2]);
-        float sp = yaw_meas + wrap_180(angle_setpoint[2] - yaw_meas);
-        out[5] = pid_compute(&pid[PID_YAW], sp, yaw_meas, CONTROL_DT);
-        sp_snap[5] = sp;  err_snap[5] = sp - yaw_meas;
-    } else if (pid_is_disabled(&pid[PID_YAW])) {
-        out[5] = stick_normalize(p_axes[PID_YAW]);
-        angle_setpoint[2] = yaw_meas;
-        pid_reset(&pid[PID_YAW]);
-        sp_snap[5] = out[5];  err_snap[5] = 0.0f;
+    if (yaw_disabled) {
+        angle_setpoint[2] = yaw_meas_q;
+    } else if (ovr_mask & (1 << PID_YAW)) {
+        angle_setpoint[2] = wrap_180(ovr_sp[PID_YAW]);
     } else {
         angle_setpoint[2] += stick_normalize(p_axes[PID_YAW]) * MAX_RATE_DPS * CONTROL_DT;
         angle_setpoint[2] = wrap_180(angle_setpoint[2]);
-        float sp = yaw_meas + wrap_180(angle_setpoint[2] - yaw_meas);
-        out[5] = pid_compute(&pid[PID_YAW], sp, yaw_meas, CONTROL_DT);
-        sp_snap[5] = sp;  err_snap[5] = sp - yaw_meas;
     }
+
+    /* Step 2 — pack the three Euler setpoints into one target quaternion.
+     * 3-2-1 ZYX (yaw → pitch → roll), VN-100 convention. */
+    quat_t q_sp = quat_from_euler_deg(angle_setpoint[2],
+                                      angle_setpoint[1],
+                                      angle_setpoint[0]);
+
+    /* Step 3 — body-frame error rotation, expressed as a deg-scaled
+     * axis-angle vector. Shortest-path handling lives inside
+     * quat_to_rotvec_deg. */
+    quat_t q_err = quat_mul(quat_conj(q_meas), q_sp);
+    float er_x, er_y, er_z;
+    quat_to_rotvec_deg(q_err, &er_x, &er_y, &er_z);
+
+    /* Step 4 — per-axis PID, or stick passthrough on disabled axes. */
+    if (roll_disabled) {
+        out[3] = stick_normalize(p_axes[PID_ROLL]);
+        pid_reset(&pid[PID_ROLL]);
+    } else {
+        out[3] = pid_compute_rate_d(&pid[PID_ROLL], er_x, roll_rate, CONTROL_DT);
+    }
+
+    if (pitch_disabled) {
+        out[4] = stick_normalize(p_axes[PID_PITCH]);
+        pid_reset(&pid[PID_PITCH]);
+    } else {
+        out[4] = pid_compute_rate_d(&pid[PID_PITCH], er_y, pitch_rate, CONTROL_DT);
+    }
+
+    if (yaw_disabled) {
+        out[5] = stick_normalize(p_axes[PID_YAW]);
+        pid_reset(&pid[PID_YAW]);
+    } else {
+        out[5] = pid_compute_rate_d(&pid[PID_YAW], er_z, yaw_rate, CONTROL_DT);
+    }
+
+    /* Telemetry: setpoint in operator's Euler convention, error in
+     * body-frame rotation-vector form (what the PID actually saw). For
+     * small angles err ≈ sp − meas; at large angles the rotation vector
+     * is what avoids the blowup the Euler error used to show. */
+    sp_snap[3] = roll_disabled  ? out[3] : angle_setpoint[0];
+    sp_snap[4] = pitch_disabled ? out[4] : angle_setpoint[1];
+    sp_snap[5] = yaw_disabled   ? out[5] : angle_setpoint[2];
+    err_snap[3] = roll_disabled  ? 0.0f : er_x;
+    err_snap[4] = pitch_disabled ? 0.0f : er_y;
+    err_snap[5] = yaw_disabled   ? 0.0f : er_z;
 
     /* ================================================================
      *  SURGE / SWAY  —  speed-tracking PID (accelerometer integration)
