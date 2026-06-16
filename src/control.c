@@ -342,10 +342,13 @@ static void stabilise(float out[6])
      *  Bypass if gains == 0: passthrough raw stick
      * ================================================================ */
 
-    /* Roll — disabled check must come first: with all-zero gains, the
-     * override branch's pid_compute() returns 0 and the pilot loses
-     * manual roll if an override is left set from a previous test. */
-    if (pid_is_disabled(&pid[PID_ROLL])) {
+    /* Roll — passthrough manual stick if (a) gains are zero, or
+     * (b) |pitch| > 45°. Past ~45° pitch the Euler representation starts
+     * coupling yaw motion into the roll reading (gimbal-lock proximity),
+     * so the VN-100's roll number becomes unreliable for closed-loop
+     * control. Hand it back to the pilot in that zone. */
+    if (pid_is_disabled(&pid[PID_ROLL]) ||
+        pitch_meas > 45.0f || pitch_meas < -45.0f) {
         out[3] = stick_normalize(p_axes[PID_ROLL]);
         angle_setpoint[0] = roll_meas;
         pid_reset(&pid[PID_ROLL]);
