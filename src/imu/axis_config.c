@@ -98,6 +98,14 @@ void axis_config_remap_ypr(float raw_yaw, float raw_pitch, float raw_roll,
     *out_pitch = raw[ypr_map[1].src] * ypr_map[1].sign;
     *out_roll  = raw[ypr_map[2].src] * ypr_map[2].sign;
     k_mutex_unlock(&axis_map_mutex);
+
+    /* IMU is mounted with a 180° rotation about the body X axis. Without
+     * this, the VN-100 reports roll ≈ 180° when the ROV is level, putting
+     * roll PID at the anti-pole. Pitch and yaw are unaffected by an
+     * X-axis rotation. */
+    *out_roll += 180.0f;
+    while (*out_roll > 180.0f)   *out_roll -= 360.0f;
+    while (*out_roll <= -180.0f) *out_roll += 360.0f;
 }
 
 void axis_config_remap_accel(float raw_ax, float raw_ay, float raw_az,
