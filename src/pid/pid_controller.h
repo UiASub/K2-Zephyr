@@ -48,9 +48,16 @@ void pid_reset(pid_controller_t *pid);
 float pid_compute(pid_controller_t *pid, float setpoint, float measurement, float dt);
 
 /**
- * @brief Check if gains are all zero (controller disabled)
+ * @brief Check if gains are effectively zero (controller disabled).
+ *
+ * Uses a small tolerance so a topside that sends near-zero gains
+ * (e.g. 1e-7 from UI rounding) still trips the disabled branch.
+ * Any real ROV gain is ≥ 1e-3, three orders of magnitude above eps.
  */
 static inline bool pid_is_disabled(const pid_controller_t *pid)
 {
-    return (pid->kp == 0.0f && pid->ki == 0.0f && pid->kd == 0.0f);
+    const float eps = 1e-6f;
+    return (pid->kp > -eps && pid->kp < eps &&
+            pid->ki > -eps && pid->ki < eps &&
+            pid->kd > -eps && pid->kd < eps);
 }
