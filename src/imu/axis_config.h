@@ -2,6 +2,8 @@
 
 #include <zephyr/kernel.h>
 
+#include "quat_math.h"
+
 /* Axis source indices for YPR */
 enum axis_src {
     AXIS_SRC_YAW   = 0,
@@ -51,3 +53,22 @@ void axis_config_remap_accel(float raw_ax, float raw_ay, float raw_az,
  * Thread-safe.
  */
 imu_offset_t axis_config_get_offset(void);
+
+/*
+ * Apply the fixed IMU mounting correction to a raw IMU-frame quaternion.
+ * The output is the rotation from world to ROV body frame.
+ *
+ * The mounting offset is currently hardcoded (180° about ROV body X) —
+ * see axis_config.c. If the mounting changes, update q_mounting_left
+ * there.
+ */
+quat_t axis_config_correct_quat(quat_t raw);
+
+/*
+ * Apply the fixed IMU mounting correction to a body-frame 3-vector
+ * (gyro rates, body-frame accel). Same mounting rotation as
+ * axis_config_correct_quat — the rotation takes IMU-frame axes onto
+ * ROV-frame axes.
+ */
+void axis_config_correct_body_vec(float in_x, float in_y, float in_z,
+                                  float *out_x, float *out_y, float *out_z);

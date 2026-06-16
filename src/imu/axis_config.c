@@ -88,6 +88,34 @@ K_MUTEX_DEFINE(axis_map_mutex);
 K_THREAD_STACK_DEFINE(axis_config_stack, 2048);
 static struct k_thread axis_config_thread_data;
 
+/*
+ * Hardcoded IMU mounting correction.
+ *
+ * Physical setup: the VN-100 is mounted with a 180° rotation about the
+ * ROV body X axis. Applied as a LEFT multiplication on the raw IMU
+ * quaternion: q_ROV = q_mounting_left * q_IMU. The same rotation, as
+ * an active body-frame rotation, takes IMU-frame vectors onto
+ * ROV-frame vectors (just flips Y and Z for the 180°-about-X case).
+ *
+ * If the mounting changes, update this constant and the body-vector
+ * helper below. Everything else flows from it.
+ */
+static const quat_t q_mounting_left = { 1.0f, 0.0f, 0.0f, 0.0f };
+
+quat_t axis_config_correct_quat(quat_t raw)
+{
+    return quat_normalize(quat_mul(q_mounting_left, raw));
+}
+
+void axis_config_correct_body_vec(float in_x, float in_y, float in_z,
+                                  float *out_x, float *out_y, float *out_z)
+{
+    /* 180° rotation about X: X is preserved, Y and Z flip. */
+    *out_x =  in_x;
+    *out_y = -in_y;
+    *out_z = -in_z;
+}
+
 void axis_config_remap_ypr(float raw_yaw, float raw_pitch, float raw_roll,
                            float *out_yaw, float *out_pitch, float *out_roll)
 {
@@ -100,9 +128,9 @@ void axis_config_remap_ypr(float raw_yaw, float raw_pitch, float raw_roll,
     k_mutex_unlock(&axis_map_mutex);
 
     /* IMU is mounted with a 180° rotation about the body X axis. Without
-     * this, the VN-100 reports roll ≈ 180° when the ROV is level, putting
-     * roll PID at the anti-pole. Pitch and yaw are unaffected by an
-     * X-axis rotation. */
+     * this, the VN-100 reports roll ≈ 180° when the ROV is level. Kept
+     * here for Euler-based telemetry; the quaternion control path uses
+     * axis_config_correct_quat() instead. */
     *out_roll += 180.0f;
     while (*out_roll > 180.0f)   *out_roll -= 360.0f;
     while (*out_roll <= -180.0f) *out_roll += 360.0f;
