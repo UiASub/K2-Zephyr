@@ -342,17 +342,19 @@ static void stabilise(float out[6])
      *  Bypass if gains == 0: passthrough raw stick
      * ================================================================ */
 
-    /* Roll */
-    if (ovr_mask & (1 << PID_ROLL)) {
-        angle_setpoint[0] = ovr_sp[PID_ROLL];
-        float sp = roll_meas + wrap_180(angle_setpoint[0] - roll_meas);
-        out[3] = pid_compute(&pid[PID_ROLL], sp, roll_meas, CONTROL_DT);
-        sp_snap[3] = sp;  err_snap[3] = sp - roll_meas;
-    } else if (pid_is_disabled(&pid[PID_ROLL])) {
+    /* Roll — disabled check must come first: with all-zero gains, the
+     * override branch's pid_compute() returns 0 and the pilot loses
+     * manual roll if an override is left set from a previous test. */
+    if (pid_is_disabled(&pid[PID_ROLL])) {
         out[3] = stick_normalize(p_axes[PID_ROLL]);
         angle_setpoint[0] = roll_meas;
         pid_reset(&pid[PID_ROLL]);
         sp_snap[3] = out[3];  err_snap[3] = 0.0f;
+    } else if (ovr_mask & (1 << PID_ROLL)) {
+        angle_setpoint[0] = ovr_sp[PID_ROLL];
+        float sp = roll_meas + wrap_180(angle_setpoint[0] - roll_meas);
+        out[3] = pid_compute(&pid[PID_ROLL], sp, roll_meas, CONTROL_DT);
+        sp_snap[3] = sp;  err_snap[3] = sp - roll_meas;
     } else {
         angle_setpoint[0] += stick_normalize(p_axes[PID_ROLL]) * MAX_RATE_DPS * CONTROL_DT;
         float sp = roll_meas + wrap_180(angle_setpoint[0] - roll_meas);
