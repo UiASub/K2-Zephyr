@@ -48,6 +48,25 @@ void pid_reset(pid_controller_t *pid);
 float pid_compute(pid_controller_t *pid, float setpoint, float measurement, float dt);
 
 /**
+ * @brief Compute one PID step using an externally supplied error and
+ *        body angular rate.
+ *
+ * For attitude control with a quaternion error vector, the per-axis
+ * error is the body-frame rotation-vector component (degrees) and the
+ * derivative term is the body angular rate (deg/s) from the gyro.
+ * This avoids both the gimbal-lock-induced jumps in Euler error and
+ * the noise amplification of differentiating the measurement.
+ *
+ * @param pid       Controller state
+ * @param error     Pre-computed error term (controller-defined units)
+ * @param body_rate Body angular rate around this axis (same time-base
+ *                  units as the integral, i.e. {error}/s)
+ * @param dt        Time step in seconds (used only for the integral)
+ * @return          Control output (clamped to [out_min, out_max])
+ */
+float pid_compute_rate_d(pid_controller_t *pid, float error, float body_rate, float dt);
+
+/**
  * @brief Check if gains are effectively zero (controller disabled).
  *
  * Uses a small tolerance so a topside that sends near-zero gains

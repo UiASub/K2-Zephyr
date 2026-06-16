@@ -64,3 +64,27 @@ float pid_compute(pid_controller_t *pid, float setpoint, float measurement, floa
     float output = p_term + i_term + d_term;
     return clampf(output, pid->out_min, pid->out_max);
 }
+
+float pid_compute_rate_d(pid_controller_t *pid, float error, float body_rate, float dt)
+{
+    if (dt <= 0.0f) {
+        return 0.0f;
+    }
+
+    float p_term = pid->kp * error;
+
+    pid->integral += error * dt;
+    pid->integral = clampf(pid->integral, pid->out_min / (pid->ki != 0.0f ? pid->ki : 1.0f),
+                                          pid->out_max / (pid->ki != 0.0f ? pid->ki : 1.0f));
+    float i_term = pid->ki * pid->integral;
+
+    /* Body rate is the time derivative of the angle measurement; D-on-
+     * measurement with the gyro avoids both setpoint-change kick and
+     * the numerical noise of differencing the angle ourselves. */
+    float d_term = -pid->kd * body_rate;
+
+    pid->initialized = true;
+
+    float output = p_term + i_term + d_term;
+    return clampf(output, pid->out_min, pid->out_max);
+}
