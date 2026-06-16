@@ -352,10 +352,14 @@ static void stabilise(float out[6])
      *
      *  Sign conventions preserved from the prior Euler control:
      *    out[3] positive → roll-right command
-     *    out[4] positive → nose-down command   (RH about ROV body Y)
+     *    out[4] positive → nose-down command   (thruster matrix fact)
      *    out[5] positive → yaw command         (RH about ROV body Z)
-     *    angle_setpoint[1] is in nose-down-positive sign so it can be
-     *    fed straight into quat_from_euler_deg.
+     *
+     *  Pitch crosses a sign convention: VN-100 reports pitch nose-up
+     *  positive (standard NED ZYX), but the stick integrator and
+     *  thruster matrix use nose-down positive. We negate at the math
+     *  boundary (q_sp build, PID output, telemetry) so angle_setpoint[1]
+     *  stays in nose-down-positive throughout.
      * ================================================================ */
 
     /* Mounting-corrected attitude quaternion (world → ROV body) */
@@ -378,7 +382,7 @@ static void stabilise(float out[6])
      * are within float-noise of the +180°-hack values; at large angles
      * the quaternion-derived ones are the truthful reading. */
     meas_snap[3] = roll_meas_q;
-    meas_snap[4] = pitch_meas_q;
+    meas_snap[4] = -pitch_meas_q;
     meas_snap[5] = yaw_meas_q;
 
     /* Mounting-corrected body angular rates (deg/s, ROV body frame).
@@ -407,7 +411,7 @@ static void stabilise(float out[6])
     }
 
     if (pitch_disabled) {
-        angle_setpoint[1] = pitch_meas_q;
+        angle_setpoint[1] = -pitch_meas_q;
     } else if (ovr_mask & (1 << PID_PITCH)) {
         angle_setpoint[1] = ovr_sp[PID_PITCH];
     } else {
@@ -424,9 +428,11 @@ static void stabilise(float out[6])
     }
 
     /* Step 2 — pack the three Euler setpoints into one target quaternion.
-     * 3-2-1 ZYX (yaw → pitch → roll), VN-100 convention. */
+     * 3-2-1 ZYX (yaw → pitch → roll), VN-100 convention. Pitch is
+     * negated because angle_setpoint[1] is nose-down-positive but the
+     * math convention is nose-up-positive. */
     quat_t q_sp = quat_from_euler_deg(angle_setpoint[2],
-                                      angle_setpoint[1],
+                                      -angle_setpoint[1],
                                       angle_setpoint[0]);
 
     /* Step 3 — body-frame error rotation, expressed as a deg-scaled
@@ -448,7 +454,9 @@ static void stabilise(float out[6])
         out[4] = stick_normalize(p_axes[PID_PITCH]);
         pid_reset(&pid[PID_PITCH]);
     } else {
-        out[4] = pid_compute_rate_d(&pid[PID_PITCH], er_y, pitch_rate, CONTROL_DT);
+        /* Negate: PID inputs are math-frame (nose-up positive) but
+         * the thruster matrix wants nose-down-positive on out[4]. */
+        out[4] = -pid_compute_rate_d(&pid[PID_PITCH], er_y, pitch_rate, CONTROL_DT);
     }
 
     if (yaw_disabled) {
@@ -466,7 +474,7 @@ static void stabilise(float out[6])
     sp_snap[4] = pitch_disabled ? out[4] : angle_setpoint[1];
     sp_snap[5] = yaw_disabled   ? out[5] : angle_setpoint[2];
     err_snap[3] = roll_disabled  ? 0.0f : er_x;
-    err_snap[4] = pitch_disabled ? 0.0f : er_y;
+    err_snap[4] = pitch_disabled ? 0.0f : -er_y;
     err_snap[5] = yaw_disabled   ? 0.0f : er_z;
 
     /* ================================================================
