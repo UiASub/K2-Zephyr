@@ -6,6 +6,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/spi.h>
 
+#include "quat_math.h"
+
 struct vn100s_data {
     const struct spi_dt_spec *spi;
 };
@@ -20,6 +22,9 @@ void vn100s_get_rates(float *yaw_rate, float *pitch_rate, float *roll_rate);
 
 /* Get latest linear acceleration (m/s^2) */
 void vn100s_get_accel(float *ax, float *ay, float *az);
+
+/* Get latest attitude quaternion (raw, in IMU body frame) */
+void vn100s_get_quat(quat_t *q);
 
 /* True when a valid sample was received within max_age_ms. */
 bool vn100s_has_recent_sample(int64_t max_age_ms);

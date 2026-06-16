@@ -29,6 +29,7 @@ static const struct spi_dt_spec vn_spi = SPI_DT_SPEC_GET(
 
 /* Register IDs */
 #define VN_REG_MODEL       1    /* Model string (24 bytes ASCII) */
+#define VN_REG_QUAT        9    /* Attitude as quaternion (4x float32 = 16 bytes, scalar-last) */
 #define VN_REG_YPR_RATE_AC 239  /* YPR + rates + linear accel body (9x float32 = 36 bytes) */
 
 /*
@@ -157,6 +158,28 @@ static int vn100s_read_all(float *yaw, float *pitch, float *roll,
     return 0;
 }
 
+/*
+ * Register 9 payload (16 bytes, little-endian floats, scalar-last):
+ *   [0..3]   Quat[0] = qx
+ *   [4..7]   Quat[1] = qy
+ *   [8..11]  Quat[2] = qz
+ *   [12..15] Quat[3] = qw (scalar)
+ */
+static int vn100s_read_quat(quat_t *q)
+{
+    uint8_t raw[16];
+    int err = vn_spi_read_reg(VN_REG_QUAT, raw, sizeof(raw));
+    if (err) {
+        return err;
+    }
+
+    memcpy(&q->x, &raw[0],  sizeof(float));
+    memcpy(&q->y, &raw[4],  sizeof(float));
+    memcpy(&q->z, &raw[8],  sizeof(float));
+    memcpy(&q->w, &raw[12], sizeof(float));
+    return 0;
+}
+
 /* Reject NaN/Inf from SPI corruption — range checks are redundant
  * with the VN-100S onboard Kalman filter. */
 static bool vn_sane(float yaw, float pitch, float roll,
@@ -168,9 +191,15 @@ static bool vn_sane(float yaw, float pitch, float roll,
            isfinite(ax)  && isfinite(ay)    && isfinite(az);
 }
 
+static bool quat_sane(const quat_t *q)
+{
+    return isfinite(q->x) && isfinite(q->y) && isfinite(q->z) && isfinite(q->w);
+}
+
 static float last_yaw, last_pitch, last_roll;
 static float last_yr, last_pr, last_rr;
 static float last_ax, last_ay, last_az;
+static quat_t last_quat = { 0.0f, 0.0f, 0.0f, 1.0f };
 static int64_t last_sample_time;
 
 void vn100s_get_ypr(float *yaw, float *pitch, float *roll)
@@ -192,6 +221,11 @@ void vn100s_get_accel(float *ax, float *ay, float *az)
     *ax = last_ax;
     *ay = last_ay;
     *az = last_az;
+}
+
+void vn100s_get_quat(quat_t *q)
+{
+    *q = last_quat;
 }
 
 bool vn100s_has_recent_sample(int64_t max_age_ms)
@@ -229,9 +263,11 @@ void vn100s_task(void *p1, void *p2, void *p3)
         }
 
         float yaw, pitch, roll, yr, pr, rr, ax, ay, az;
+        quat_t q;
         err = vn100s_read_all(&yaw, &pitch, &roll, &yr, &pr, &rr, &ax, &ay, &az);
-        if (!err) {
-            if (vn_sane(yaw, pitch, roll, yr, pr, rr, ax, ay, az)) {
+        int qerr = vn100s_read_quat(&q);
+        if (!err && !qerr) {
+            if (vn_sane(yaw, pitch, roll, yr, pr, rr, ax, ay, az) && quat_sane(&q)) {
                 last_yaw   = yaw;
                 last_pitch = pitch;
                 last_roll  = roll;
@@ -241,6 +277,7 @@ void vn100s_task(void *p1, void *p2, void *p3)
                 last_ax    = ax;
                 last_ay    = ay;
                 last_az    = az;
+                last_quat  = quat_normalize(q);
                 last_sample_time = k_uptime_get();
             } else {
                 LOG_WRN("VN-100S: corrupt sample "
@@ -248,7 +285,7 @@ void vn100s_task(void *p1, void *p2, void *p3)
                         (int)yaw, (int)pitch, (int)roll);
             }
         } else {
-            LOG_ERR("VN-100S read err %d", err);
+            LOG_ERR("VN-100S read err %d (quat %d)", err, qerr);
         }
 
         if ((k_uptime_get() - last_sample_time) > VN_STALE_REINIT_MS) {
