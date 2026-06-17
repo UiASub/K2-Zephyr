@@ -163,55 +163,6 @@ static int collect_samples(uint32_t *cycles_used)
     return 0;
 }
 
-static void scan_frequency_bins(float fs_hz)
-{
-    static const float probe_freqs_hz[] = {
-        5000.0f,
-        8000.0f,
-        10000.0f,
-        12000.0f,
-        15000.0f,
-        18000.0f,
-        20000.0f,
-        22000.0f,
-        25000.0f,
-        30000.0f,
-        35000.0f,
-        40000.0f,
-    };
-
-    uint64_t best_power = 0;
-    float best_freq_hz = 0.0f;
-
-    LOG_INF("Frequency scan, fs=%u Hz, Nyquist=%u Hz",
-            (unsigned int)fs_hz,
-            (unsigned int)(fs_hz / 2.0f));
-
-    for (int i = 0; i < ARRAY_SIZE(probe_freqs_hz); i++) {
-        float f = probe_freqs_hz[i];
-
-        if (f >= (fs_hz / 2.0f)) {
-            continue;
-        }
-
-        uint64_t p = goertzel_power_float(samples, N_SAMPLES, f, fs_hz);
-
-        if (p > best_power) {
-            best_power = p;
-            best_freq_hz = f;
-        }
-
-        LOG_INF("  f=%05u Hz power=%010llu",
-                (unsigned int)f,
-                (unsigned long long)p);
-    }
-
-    LOG_INF("  best=%05u Hz power=%010llu",
-            (unsigned int)best_freq_hz,
-            (unsigned long long)best_power);
-}
-
-
 static uint32_t rank_pulse_pp(uint16_t pp)
 {
     uint32_t rank = 0;
@@ -297,9 +248,7 @@ static void pinger_adc_thread(void *arg1, void *arg2, void *arg3)
             continue;
         }
 
-        float fs_measured_hz =
-            ((float)N_SAMPLES * (float)sys_clock_hw_cycles_per_sec()) /
-            (float)cycles_used;
+    
         float fs_for_detection_hz = SAMPLE_RATE_HZ;
 
         uint64_t p_low = goertzel_power_float(samples, N_SAMPLES, LOWER_GUARD_FREQ_HZ, fs_for_detection_hz);
@@ -471,41 +420,11 @@ static void pinger_adc_thread(void *arg1, void *arg2, void *arg3)
             prev_detected = detected;
             last_log_ms = now_ms;
 
-            LOG_INF(" ==== \n ==== \n %s win=%d ping=%d cad=%d dt=%u age=%u ms raw=%04d/%04d/%04d \n pp=%04d %s Ptgt=%010llu gate=%010llu ratio=%03llu.%01llu share=%03llu.%01llu%% fs=%06u \n active_pp=%04u pulse_pp=%04u rank=%02u/%02u \n ====",
-                    detected ? "DETECTED" : "----",
-                    ping_window ? 1 : 0,
-                    ping_confirm_count,
-                    cadence_hits,
-                    last_cadence_dt_ms,
-                    ping_age_ms,
-                    last_raw_min,
-                    last_raw_mean,
-                    last_raw_max,
+            LOG_INF("\n ==== Hydrophone: \n %s, pp=%04d %s \n ====",
+                    detected ? "DETECTED" : "LISTENING...",
                     last_raw_pp,
-                    strength_state,
-                    (unsigned long long)p_target,
-                    (unsigned long long)adaptive_gate,
-                    (unsigned long long)(ratio_x10 / 10U),
-                    (unsigned long long)(ratio_x10 % 10U),
-                    (unsigned long long)(target_share_x10 / 10U),
-                    (unsigned long long)(target_share_x10 % 10U),
-                    (unsigned int)fs_measured_hz,
-                    (unsigned int)current_pulse_peak_pp,
-                    (unsigned int)last_pulse_peak_pp,
-                    (unsigned int)last_pulse_rank,
-                    (unsigned int)pulse_history_filled);
+                    strength_state);
         }
-            
-#if 0
-        static int scan_divider = 0;
-
-        scan_divider++;
-
-        if (scan_divider >= 8) {
-            scan_divider = 0;
-            scan_frequency_bins(fs_for_detection_hz);
-        }
-#endif
         k_sleep(K_MSEC(1));
     }
 }
