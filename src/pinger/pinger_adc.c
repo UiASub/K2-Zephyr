@@ -21,9 +21,9 @@ LOG_MODULE_REGISTER(pinger_adc, LOG_LEVEL_INF);
 #define SAMPLE_RATE_HZ      712000.0f
 #define N_SAMPLES           1024
 
-#define TARGET_FREQ_HZ          20000.0f
-#define LOWER_GUARD_FREQ_HZ     15000.0f
-#define UPPER_GUARD_FREQ_HZ     25000.0f
+#define TARGET_FREQ_HZ          30000.0f
+#define LOWER_GUARD_FREQ_HZ     25000.0f
+#define UPPER_GUARD_FREQ_HZ     35000.0f
 
 #define DETECT_RATIO_X10        80          /* 8.0x */
 #define DETECT_SHARE_X10        800         /* 80.0% */
